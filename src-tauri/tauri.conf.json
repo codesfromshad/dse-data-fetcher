@@ -1,0 +1,71 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DSE Data Fetcher",
+  "version": "../package.json",
+  "identifier": "com.codesfromshad.dse-data-fetcher",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "DSE Data Fetcher",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 760,
+        "minHeight": 540,
+        "center": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Shadman Rafid Chowdhury (codesfromshad)",
+    "copyright": "Copyright © 2026 Shadman Rafid Chowdhury (codesfromshad). All rights reserved.",
+    "category": "Finance",
+    "shortDescription": "DSE Data Fetcher",
+    "longDescription": "Fetches company data from the Dhaka Stock Exchange website into an Excel workbook.",
+    "homepage": "https://github.com/codesfromshad/dse-data-fetcher",
+    "licenseFile": "../legal/build/LICENSE.txt",
+    "resources": {
+      "../legal/EULA.txt": "legal/EULA.txt",
+      "../legal/DISCLAIMER.txt": "legal/DISCLAIMER.txt",
+      "../legal/PRIVACY.txt": "legal/PRIVACY.txt",
+      "../legal/THIRD-PARTY-NOTICES.txt": "legal/THIRD-PARTY-NOTICES.txt",
+      "../CHANGELOG.md": "CHANGELOG.md"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM2OUY5QjY1MUZEMEU2MDkKUldRSjV0QWZaWnVmeGs4UVZ3dVVvVm0xd2p6UzRLSTlzRG1sMUFnaFU1NEVGdmMvY0huUkRBSGoK",
+      "endpoints": [
+        "https://github.com/codesfromshad/dse-data-fetcher/releases/download/updater/stable.json"
+      ],
+      "windows": { "installMode": "passive" }
+    }
+  }
+}

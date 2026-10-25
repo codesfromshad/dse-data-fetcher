@@ -1,0 +1,24 @@
+DSE DATA FETCHER
+DISCLAIMER
+
+Last updated: 25 October 2026
+
+NO AFFILIATION
+
+DSE Data Fetcher is an independent tool. It is not affiliated with, endorsed by, sponsored by or approved by the Dhaka Stock Exchange PLC (DSE), the Bangladesh Securities and Exchange Commission (BSEC), or any listed company. "Dhaka Stock Exchange" and "DSE" are used only to describe where the data comes from; all names and marks belong to their respective owners.
+
+SOURCE OF THE DATA
+
+All market data is read from the public pages of the old DSE website (https://old.dsebd.org/) at the moment you run a fetch. The app does not create, correct or verify that data. It can be delayed, incomplete, inaccurate or out of date, and the app can misread a page if the website changes. Companies that cannot be read are skipped and reported in the log.
+
+NOT FINANCIAL ADVICE
+
+Nothing produced by this app is financial, investment, legal or tax advice, or a recommendation to buy, sell or hold any security. Always check figures against official DSE publications and company disclosures, and consult a qualified, licensed adviser before you make an investment decision. Trading securities involves risk, including the loss of your capital.
+
+YOUR RESPONSIBILITY
+
+You are responsible for how you use the app and the data. That includes following the terms of use of the DSE website and any laws or regulations that apply to you, and not using the app in a way that overloads or disrupts the website.
+
+NO WARRANTY
+
+The app and the data are provided "as is", without warranty of any kind. To the fullest extent permitted by law, the author is not liable for any loss or damage, including trading losses, that arises from using the app or relying on its data. The End User License Agreement sets out the full terms.

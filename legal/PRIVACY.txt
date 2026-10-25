@@ -1,0 +1,34 @@
+DSE DATA FETCHER
+PRIVACY NOTICE
+
+Last updated: 25 October 2026
+
+SUMMARY
+
+DSE Data Fetcher does not collect any personal information. It has no accounts, no analytics, no telemetry and no advertising, and it sends nothing about you to the author.
+
+NETWORK CONNECTIONS
+
+The app connects to the internet only to:
+
+  - old.dsebd.org - to download the market data you ask for.
+  - www.google.com (DNS lookup only) - to check that you are online before a fetch. No request is sent to Google's servers; your computer only asks your DNS resolver for the address.
+  - github.com and its download servers - to check for and download updates, if update checks are turned on. GitHub receives the request like any website visit (including your IP address) and handles it under GitHub's privacy statement.
+
+These websites see your IP address and a standard browser-like request, just as they would if you visited them in a web browser.
+
+DATA STORED ON YOUR COMPUTER
+
+  - Settings (theme, spreadsheet app, update preferences) in %APPDATA%\com.codesfromshad.dse-data-fetcher\settings.json.
+  - The fetched workbook, as a temporary file in your Windows temp folder. It is deleted when you close the app, unless it is still open in another program. Use "Save a copy" to keep it.
+  - Microsoft Edge WebView2 keeps its own cache in %LOCALAPPDATA%\com.codesfromshad.dse-data-fetcher.
+
+Uninstalling the app removes the program files. You can remove your settings by deleting the folders above.
+
+MICROSOFT EDGE WEBVIEW2
+
+The app's window is drawn by the Microsoft Edge WebView2 Runtime, which is part of Windows. Microsoft may collect diagnostic data from WebView2 according to your Windows diagnostic data settings and the Microsoft Privacy Statement.
+
+CHANGES AND CONTACT
+
+If this notice changes, the new version ships with the update. Questions: contact@codesfromshad.com

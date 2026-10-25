@@ -1,0 +1,30 @@
+{
+  "name": "dse-data-fetcher",
+  "version": "1.0.2-beta",
+  "description": "DSE data fetcher tool",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "dse-data-fetcher": "./src/cli.jsx"
+  },
+  "scripts": {
+    "start": "bun src/cli.jsx",
+    "build": "bun build.js",
+    "build:linux": "bun build.js linux",
+    "build:mac": "bun build.js mac",
+    "build:all": "bun build.js all"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "cheerio": "^1.2.0",
+    "exceljs": "^4.4.0",
+    "ink": "~7.1.1",
+    "react": "^19.2.0",
+    "string-width": "^8.3.0",
+    "wrap-ansi": "^10.0.2"
+  },
+  "devDependencies": {
+    "pe-library": "^2.0.1",
+    "resedit": "^3.1.0"
+  }
+}

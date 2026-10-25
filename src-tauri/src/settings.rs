@@ -1,0 +1,125 @@
+//! Persistent user settings, stored as JSON in the app's config folder
+//! (%APPDATA%\com.codesfromshad.dse-data-fetcher\settings.json on Windows).
+//!
+//! Every field has a default, so a settings file from an older version (or a
+//! missing one) just fills in the gaps.
+
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemePreference {
+    /// Follow the Windows light/dark setting.
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateChannel {
+    Stable,
+    Beta,
+}
+
+impl UpdateChannel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UpdateChannel::Stable => "stable",
+            UpdateChannel::Beta => "beta",
+        }
+    }
+}
+
+/// Everything the Settings page edits directly (the spreadsheet app has its
+/// own command because it needs validating).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Preferences {
+    pub theme: ThemePreference,
+    /// Run the system check on launch and start fetching if it passes.
+    pub auto_fetch_on_launch: bool,
+    /// Open the workbook in the spreadsheet app when a fetch finishes.
+    pub open_after_fetch: bool,
+    /// Check GitHub for a newer version on launch and every few hours.
+    pub check_for_updates: bool,
+    /// Download a found update in the background (installing still waits for
+    /// the user to restart).
+    pub auto_download_updates: bool,
+    /// `None` = follow the installed build: beta builds get the beta channel.
+    pub update_channel: Option<UpdateChannel>,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            theme: ThemePreference::System,
+            auto_fetch_on_launch: true,
+            open_after_fetch: true,
+            check_for_updates: true,
+            auto_download_updates: true,
+            update_channel: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Settings {
+    /// Full path to a spreadsheet app's .exe. `None` = use the system default.
+    pub spreadsheet_app: Option<PathBuf>,
+    #[serde(flatten)]
+    pub preferences: Preferences,
+    /// Unix time (ms) of the last successful update check.
+    pub last_update_check: Option<u64>,
+    /// The version whose "What's new" the user has already seen.
+    pub last_seen_version: Option<String>,
+}
+
+pub fn settings_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_config_dir().ok().map(|dir| dir.join("settings.json"))
+}
+
+/// Missing or unreadable settings fall back to defaults.
+pub fn load(app: &AppHandle) -> Settings {
+    settings_path(app)
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
+    let path = settings_path(app).ok_or("Couldn't find the app's config folder.")?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("Couldn't create {}: {e}", dir.display()))?;
+    }
+    let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("Couldn't save settings: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_files_still_load() {
+        let s: Settings = serde_json::from_str(r#"{ "spreadsheetApp": "C:\\x.exe" }"#).unwrap();
+        assert_eq!(s.spreadsheet_app, Some(PathBuf::from("C:\\x.exe")));
+        assert!(s.preferences.auto_fetch_on_launch);
+        assert!(s.preferences.update_channel.is_none());
+    }
+
+    #[test]
+    fn round_trip() {
+        let mut s = Settings::default();
+        s.preferences.theme = ThemePreference::Dark;
+        s.preferences.update_channel = Some(UpdateChannel::Stable);
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.preferences.theme, ThemePreference::Dark);
+        assert_eq!(back.preferences.update_channel, Some(UpdateChannel::Stable));
+    }
+}

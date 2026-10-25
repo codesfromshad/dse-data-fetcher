@@ -1,0 +1,98 @@
+DSE DATA FETCHER
+END USER LICENSE AGREEMENT
+
+Version 2.0 - Effective 25 October 2026
+
+Copyright (c) 2026 Shadman Rafid Chowdhury (codesfromshad). All rights reserved.
+
+PLEASE READ THIS AGREEMENT CAREFULLY BEFORE INSTALLING OR USING THE SOFTWARE. BY CLICKING "I AGREE", OR BY INSTALLING, COPYING OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT INSTALL OR USE THE SOFTWARE.
+
+1. DEFINITIONS
+
+"Author", "we", "us" means Shadman Rafid Chowdhury (codesfromshad), the owner of the Software.
+
+"Software" means DSE Data Fetcher, including its executable files, installer, updates, documentation and any related materials provided by the Author.
+
+"You" means the individual or the legal entity installing or using the Software. If you accept this Agreement on behalf of an organization, you confirm that you have the authority to bind that organization.
+
+"Market Data" means any data the Software retrieves from third-party websites, including the website of the Dhaka Stock Exchange PLC ("DSE").
+
+2. LICENSE GRANT
+
+Subject to your compliance with this Agreement, the Author grants you a personal, non-exclusive, non-transferable, non-sublicensable, revocable license to install and use the Software, free of charge, on devices that you own or control, for your own personal use or for the internal business purposes of your organization.
+
+3. RESTRICTIONS
+
+Except where applicable law expressly allows it despite this restriction, you must not:
+
+  (a) copy, modify, translate or create derivative works of the Software;
+  (b) reverse engineer, decompile or disassemble the Software, or attempt to derive its source code;
+  (c) sell, rent, lease, lend, sublicense, distribute, publish or otherwise make the Software available to any third party, including as a hosted or managed service;
+  (d) remove, alter or obscure any copyright, trademark or other proprietary notice in the Software;
+  (e) use the Software in a way that places an unreasonable load on, disrupts or interferes with any third-party website or service, or that breaches the terms of use of such a website or service;
+  (f) use the Software for any unlawful purpose, including market manipulation or any activity prohibited by securities laws or regulations; or
+  (g) use the Author's name, trademarks or logos to endorse or promote any product without prior written permission.
+
+4. OWNERSHIP
+
+The Software is licensed, not sold. The Author and its licensors retain all right, title and interest in and to the Software, including all intellectual property rights. All rights not expressly granted to you in this Agreement are reserved.
+
+5. MARKET DATA AND THIRD-PARTY SERVICES
+
+The Software retrieves publicly available Market Data from third-party websites that the Author does not own, operate or control. The Author is not affiliated with, endorsed by or sponsored by DSE. The availability, format and content of Market Data may change at any time without notice, which may cause the Software to stop working in whole or in part.
+
+You are solely responsible for making sure that your use of the Software and of any Market Data complies with the terms of use of the source websites and with all laws and regulations that apply to you. Market Data remains subject to the rights of its owners.
+
+6. NOT INVESTMENT ADVICE
+
+The Software is a data retrieval tool. Nothing in the Software or in any output it produces is financial, investment, legal, tax or other professional advice, or a recommendation to buy, sell or hold any security. You are solely responsible for any decision you make based on Market Data, and you should verify all data against official sources and consult a qualified adviser before making investment decisions.
+
+7. UPDATES
+
+The Software can check for, download and install updates from the Author's official GitHub repository. You can turn automatic checks and downloads off in Settings. Updates are licensed under the version of this Agreement that accompanies them. The Author is not obliged to provide updates, support or maintenance.
+
+8. PRIVACY
+
+The Software does not collect, store or transmit your personal information to the Author, and it contains no analytics or telemetry. The Privacy Notice that accompanies the Software describes the network connections the Software makes and the data it stores on your device.
+
+9. THIRD-PARTY COMPONENTS
+
+The Software includes open-source components that are licensed to you under their own license terms, which are listed in the Third-Party Notices that accompany the Software. Nothing in this Agreement limits your rights under, or grants you rights that supersede, those licenses.
+
+10. DISCLAIMER OF WARRANTIES
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE AND ALL MARKET DATA ARE PROVIDED "AS IS" AND "AS AVAILABLE", WITH ALL FAULTS AND WITHOUT WARRANTY OF ANY KIND. THE AUTHOR DISCLAIMS ALL WARRANTIES, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY AND QUIET ENJOYMENT. THE AUTHOR DOES NOT WARRANT THAT THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE, THAT DEFECTS WILL BE CORRECTED, OR THAT ANY MARKET DATA WILL BE ACCURATE, COMPLETE, CURRENT OR AVAILABLE.
+
+11. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL THE AUTHOR OR ANY CONTRIBUTOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, TRADING LOSSES, LOSS OF DATA OR BUSINESS INTERRUPTION, ARISING OUT OF OR IN CONNECTION WITH THIS AGREEMENT, THE SOFTWARE OR ANY MARKET DATA, HOWEVER CAUSED AND UNDER ANY THEORY OF LIABILITY, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+BECAUSE THE SOFTWARE IS PROVIDED FREE OF CHARGE, THE AUTHOR'S TOTAL AGGREGATE LIABILITY UNDER THIS AGREEMENT WILL NOT EXCEED ONE THOUSAND BANGLADESHI TAKA (BDT 1,000).
+
+Some jurisdictions do not allow the exclusion or limitation of certain warranties or damages, so some of the above may not apply to you. In that case, the exclusions and limitations apply to the fullest extent permitted by law.
+
+12. INDEMNITY
+
+You agree to indemnify and hold harmless the Author from any claim, loss or expense, including reasonable legal fees, arising out of your misuse of the Software, your breach of this Agreement, or your violation of any law or of the rights of any third party.
+
+13. TERMINATION
+
+This Agreement is effective until terminated. Your rights under it end automatically and without notice if you fail to comply with any of its terms. You may terminate it at any time by uninstalling the Software and deleting all copies. Sections 4, 5, 6 and 10 to 16 survive termination.
+
+14. EXPORT AND SANCTIONS
+
+You must comply with all export control and sanctions laws that apply to your use of the Software.
+
+15. GOVERNING LAW
+
+This Agreement is governed by the laws of the People's Republic of Bangladesh, without regard to its conflict-of-law rules. The courts of Dhaka, Bangladesh have exclusive jurisdiction over any dispute arising out of or in connection with this Agreement, unless mandatory law where you live gives you the right to bring proceedings elsewhere.
+
+16. GENERAL
+
+This Agreement, together with the Privacy Notice, the Disclaimer and the Third-Party Notices, is the entire agreement between you and the Author regarding the Software. If any provision is held unenforceable, it will be modified to the minimum extent necessary and the remaining provisions will stay in effect. A failure to enforce any provision is not a waiver of it. You may not assign this Agreement; the Author may assign it without restriction. The Author may update this Agreement; the updated version applies to versions of the Software released with it.
+
+17. CONTACT
+
+Shadman Rafid Chowdhury (codesfromshad)
+Email: contact@codesfromshad.com
+Phone: +880 1769-030206
