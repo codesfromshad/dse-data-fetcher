@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { DSE_URL } from '../lib/dse';
-import { describeError, get } from '../lib/http';
+import { describeError } from '../lib/errors';
+import { checkDse } from '../lib/fetch';
 import {
   checkOnline,
   checkTempDir,
@@ -86,10 +86,9 @@ export function useSystemCheck() {
         set('dse', { state: 'skipped', detail: 'Skipped: no internet connection.' });
         return false;
       }
-      const startedAt = performance.now();
       try {
-        await get(DSE_URL, {}, { retries: 0, timeoutMs: 10_000 });
-        set('dse', { state: 'ok', detail: `Reachable · ${Math.round(performance.now() - startedAt)} ms` });
+        const ms = await checkDse();
+        set('dse', { state: 'ok', detail: `Reachable · ${ms} ms` });
         return true;
       } catch (error) {
         set('dse', { state: 'error', detail: `Not reachable: ${describeError(error)}` });

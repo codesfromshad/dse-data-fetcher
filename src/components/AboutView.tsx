@@ -44,7 +44,7 @@ import {
   LINKS,
   SUMMARY,
 } from '../lib/description';
-import { DSE_URL } from '../lib/dse';
+import { DSE_URL } from '../lib/fetch';
 import { getBuildInfo, type BuildInfo } from '../lib/settings';
 import { LegalDialog } from './LegalDialog';
 import { ChangelogDialog, formatDate, ReleaseBlock } from './ReleaseNotes';

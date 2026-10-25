@@ -10,6 +10,10 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Changed
+
+- Fetching, page parsing and creating the workbook now all run in the app's native (Rust) core instead of the window. The window stays responsive during a run, Cancel stops requests that are already in flight, and the app is smaller (ExcelJS and cheerio are gone).
+
 ## [2.0.0-beta.2] - 2026-10-25
 
 ### Added

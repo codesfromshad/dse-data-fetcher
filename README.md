@@ -81,17 +81,19 @@ are installed next to the app in a `legal` folder.
 
 | Where | What |
 | --- | --- |
-| `src/lib/pipeline.ts` | The fetch run: cookie → symbols → company pages (10 at a time, 6 attempts each) → xlsx → open |
-| `src/lib/parse.ts` + `src/workers/parse.worker.ts` | cheerio parsing of company pages, off the UI thread |
-| `src/lib/dse.ts`, `http.ts` | DSE URLs/headers, retry/backoff |
-| `src/lib/native.ts`, `settings.ts` | Typed wrappers for the Rust commands |
+| `src-tauri/src/fetch/pipeline.rs` | The fetch run: cookie → symbols → company pages (10 at a time, retries from Settings) → sorted rows |
+| `src-tauri/src/fetch/mod.rs` | `start_fetch` / `cancel_fetch` / `check_dse` commands; streams log + progress events to the UI over a channel, writes and opens the xlsx |
+| `src-tauri/src/fetch/parse.rs`, `time.rs` | Company-page parsing (`scraper`, same selectors as the old cheerio code) and DSE date handling |
+| `src-tauri/src/fetch/dse.rs`, `http.rs`, `workbook.rs` | DSE URLs/headers, retry/backoff/cancel, the xlsx (`rust_xlsxwriter`) |
+| `src/hooks/useFetchRun.ts`, `src/lib/fetch.ts` | Starts/cancels a run and renders its events. The frontend does no fetching or parsing |
+| `src/lib/native.ts`, `settings.ts` | Typed wrappers for the other Rust commands |
 | `src/hooks/useSettings.tsx`, `SettingsView.tsx`, `SettingRow.tsx` | Settings (theme, fetching, updates, system status, advanced) |
 | `src/hooks/useUpdater.tsx`, `UpdateControls.tsx` | Update checks, download progress, banner, restart-to-install |
 | `src/components/AboutView.tsx`, `ReleaseNotes.tsx`, `LegalDialog.tsx`, `WhatsNewDialog.tsx` | About page, changelog, legal documents |
 | `src/lib/changelog.ts` | CHANGELOG.md parser (shared by the app and `scripts/`) |
 | `src-tauri/src/updater.rs` | Check/download/install against the channel manifest |
 | `src-tauri/src/spreadsheet.rs`, `settings.rs` | Finds the .xlsx app (Windows file association), launches a chosen .exe, saves settings |
-| `src-tauri/src/lib.rs` | HTTP (reqwest with a per-run cookie jar), online check, temp files, settings and build-info commands, theme |
+| `src-tauri/src/lib.rs` | Online check, temp files, settings and build-info commands, theme |
 | `scripts/` | `release.ts`, `release-notes.ts`, `build-legal.ts`, `setup-updater.ts` |
 
 ## Startup check

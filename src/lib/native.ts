@@ -1,33 +1,9 @@
 // Typed wrappers around the Rust commands in src-tauri/src/lib.rs.
 import { invoke } from '@tauri-apps/api/core';
 
-export type HttpErrorKind = 'connect' | 'timeout' | 'status' | 'body' | 'other';
+// (The fetch commands have their own wrappers in fetch.ts.)
 
-export class HttpError extends Error {
-  constructor(
-    readonly kind: HttpErrorKind,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'HttpError';
-  }
-}
-
-export async function httpGet(url: string, headers: Record<string, string>, timeoutMs: number): Promise<string> {
-  try {
-    return await invoke<string>('http_get', { url, headers, timeoutMs });
-  } catch (error) {
-    const e = error as { kind?: HttpErrorKind; message?: string };
-    throw new HttpError(e?.kind ?? 'other', e?.message ?? String(error));
-  }
-}
-
-export const resetHttpSession = () => invoke<void>('reset_http_session');
 export const checkOnline = () => invoke<boolean>('check_online');
-
-/** Writes bytes to the OS temp folder; returns the full path. */
-export const writeTempFile = (fileName: string, bytes: Uint8Array) =>
-  invoke<string>('write_temp_file', bytes, { headers: { 'x-file-name': fileName } });
 
 export interface LockedFile {
   path: string;
