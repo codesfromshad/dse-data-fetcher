@@ -22,6 +22,19 @@ export interface Progress {
   counts: Counts;
 }
 
+/** Network metrics (mirrors `Snapshot` in fetch/metrics.rs). Rates in bytes/s. */
+export interface NetworkMetrics {
+  /** Bytes received from the network (compressed, as sent by DSE). */
+  transferred: number;
+  /** Bytes after decompression: the HTML/JSON actually parsed. */
+  processed: number;
+  requests: number;
+  /** Over the last second; 0 once the run is over. */
+  rate: number;
+  peakRate: number;
+  averageRate: number;
+}
+
 export interface FetchResult {
   fileName: string;
   filePath: string;
@@ -29,12 +42,15 @@ export interface FetchResult {
   failedSymbols: string[];
   elapsedMs: number;
   opened: boolean;
+  network: NetworkMetrics;
 }
 
 export type FetchEvent =
   /** `time`: Unix ms, stamped in Rust. */
   | { event: 'log'; data: { level: LogLevel; parts: LogPart[]; time: number } }
-  | { event: 'progress'; data: Progress };
+  | { event: 'progress'; data: Progress }
+  /** A few times a second, only with "Show network metrics" on. */
+  | { event: 'metrics'; data: NetworkMetrics };
 
 export type FetchErrorKind = 'cancelled' | 'offline' | 'busy' | 'failed';
 

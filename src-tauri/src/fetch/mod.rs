@@ -5,6 +5,7 @@
 pub mod dse;
 pub mod http;
 pub mod log;
+pub mod metrics;
 pub mod parse;
 pub mod pipeline;
 pub mod time;
@@ -24,6 +25,7 @@ use crate::AppState;
 use dse::DSE_URL;
 use http::{describe_error, HttpError};
 use log::{hl, hl_as, parts, Level, Part, Tone};
+use metrics::{Meter, Metrics, Snapshot, SAMPLE_INTERVAL};
 use pipeline::{Counts, Options, RunError, Sink, Stage};
 
 /// The running fetch, if any, so `cancel_fetch` can stop it.
@@ -47,9 +49,17 @@ pub enum FetchEvent {
     /// `time` is Unix time in ms.
     Log { level: Level, parts: Vec<Part>, time: i64 },
     Progress { stage: Stage, status: String, counts: Counts },
+    /// Network metrics, a few times a second (only with the setting on).
+    Metrics(Snapshot),
 }
 
 struct ChannelSink(Channel<FetchEvent>);
+
+impl ChannelSink {
+    fn metrics(&self, snapshot: Snapshot) {
+        let _ = self.0.send(FetchEvent::Metrics(snapshot));
+    }
+}
 
 impl Sink for ChannelSink {
     fn log(&self, level: Level, parts: Vec<Part>) {
@@ -70,6 +80,8 @@ pub struct FetchResult {
     failed_symbols: Vec<String>,
     elapsed_ms: u64,
     opened: bool,
+    /// Final network numbers for the fetching part of the run.
+    network: Snapshot,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,7 +167,7 @@ pub fn cancel_fetch(fetch: State<'_, FetchState>) {
 #[tauri::command]
 pub async fn check_dse() -> Result<u64, HttpError> {
     let started = Instant::now();
-    http::get_once(&http::new_client(), DSE_URL, &[], Duration::from_secs(10)).await?;
+    http::get_once(&http::new_client(), DSE_URL, &[], Duration::from_secs(10), &Metrics::default()).await?;
     Ok(started.elapsed().as_millis() as u64)
 }
 
@@ -175,19 +187,43 @@ async fn run(
         return Err(Failure::Cancelled);
     }
 
-    // Read before every retry, so changing the setting mid-run applies at once.
+    // Settings are read live, so changing them mid-run applies at once.
     let max_retries = || state.settings.lock().unwrap().preferences.fetch_retries;
-    let mut fetched = pipeline::fetch_all(Options {
+    let show_metrics = || state.settings.lock().unwrap().preferences.show_network_metrics;
+    let metrics = Metrics::default();
+    let mut meter = Meter::new(started);
+    let fetch_all = pipeline::fetch_all(Options {
         base_url: DSE_URL,
         cancel,
+        metrics: &metrics,
         sink,
         max_retries: &max_retries,
         retry_unit: Duration::from_secs(1),
         retry_cap: Duration::from_secs(15),
-    })
-    .await?;
+    });
+    tokio::pin!(fetch_all);
+    // Sample the counters on a timer while the fetch runs.
+    let mut ticker = tokio::time::interval(SAMPLE_INTERVAL);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let fetched = loop {
+        tokio::select! {
+            result = &mut fetch_all => break result,
+            _ = ticker.tick() => {
+                let snapshot = meter.sample(&metrics);
+                if show_metrics() {
+                    sink.metrics(snapshot);
+                }
+            }
+        }
+    };
     let elapsed = started.elapsed();
-    pipeline::log_complete(sink, &fetched, elapsed);
+    let network = meter.finish(&metrics, elapsed);
+    let show = show_metrics();
+    if show {
+        sink.metrics(network);
+    }
+    let mut fetched = fetched?;
+    pipeline::log_complete(sink, &fetched, elapsed, show.then_some(&network));
 
     let counts = fetched.counts;
     sink.progress(Stage::Writing, "Creating spreadsheet...".into(), counts);
@@ -215,6 +251,7 @@ async fn run(
         failed_symbols: fetched.failed_symbols,
         elapsed_ms: elapsed.as_millis() as u64,
         opened: false,
+        network,
     };
 
     if !open_after {

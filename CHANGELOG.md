@@ -10,6 +10,17 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Added
+
+- **Network metrics** while fetching: data transferred (as downloaded, compressed), data processed (decompressed), live transfer speed, average and peak speed, and request count, on the progress card and in the activity log summary. Turn them on or off in Settings → Fetching → **Show network metrics**.
+
+### Changed
+
+- The system check is quieter: instead of listing every check, the Fetch page just says **System check passed**. When something is wrong it says what, in plain words, and what to try (offline, DSE down or not responding, a security certificate problem, the temp folder not writable, no spreadsheet app…). Every check is still listed in Settings → System status.
+- The **Elapsed** timer now counts in hundredths of a second while fetching and shows the exact time to the millisecond when the run ends.
+- Pills in the activity log (like **COMPLETE** and the elapsed time) are now the same size as the text around them, so they're easier to read.
+- Faster and lighter: styles are compiled at build time instead of when the app starts, Settings and About load in the background after the window opens, and the activity log is cheaper to render. The code the window loads at startup is about 30% smaller.
+
 ## [2.0.0-beta.3] - 2026-10-25
 
 ### Changed

@@ -5,7 +5,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 use tokio_util::sync::CancellationToken;
 
-use super::http::{self, GetError, Headers, HttpError, Retry};
+use super::{
+    http::{self, GetError, Headers, HttpError, Retry},
+    metrics::Metrics,
+};
 
 pub const DSE_URL: &str = "https://old.dsebd.org/";
 
@@ -40,15 +43,16 @@ pub fn is_treasury_bond(symbol: &str) -> bool {
     TREASURY_BOND.is_match(symbol)
 }
 
-/// A DSE session: one cookie jar, one base URL.
-pub struct Dse {
+/// A DSE session: one cookie jar, one base URL, one set of byte counters.
+pub struct Dse<'a> {
     client: reqwest::Client,
     base: String,
+    metrics: &'a Metrics,
 }
 
-impl Dse {
-    pub fn new(base: impl Into<String>) -> Self {
-        Self { client: http::new_client(), base: base.into() }
+impl<'a> Dse<'a> {
+    pub fn new(base: impl Into<String>, metrics: &'a Metrics) -> Self {
+        Self { client: http::new_client(), base: base.into(), metrics }
     }
 
     /// Hit the home page so the session cookie lands in the jar.
@@ -57,7 +61,7 @@ impl Dse {
         cancel: &CancellationToken,
         on_retry: impl Fn(&HttpError, u32, std::time::Duration),
     ) -> Result<(), GetError> {
-        http::get(&self.client, &self.base, &[], Retry::default(), cancel, on_retry).await.map(drop)
+        http::get(&self.client, &self.base, &[], Retry::default(), cancel, self.metrics, on_retry).await.map(drop)
     }
 
     pub async fn fetch_symbols(
@@ -66,7 +70,7 @@ impl Dse {
         on_retry: impl Fn(&HttpError, u32, std::time::Duration),
     ) -> Result<Vec<String>, GetError> {
         let url = format!("{}ajax/suggestList.php?suggestType=tc", self.base);
-        let body = http::get(&self.client, &url, XHR_HEADERS, Retry::default(), cancel, on_retry).await?;
+        let body = http::get(&self.client, &url, XHR_HEADERS, Retry::default(), cancel, self.metrics, on_retry).await?;
         parse_symbols(&body).map_err(|message| GetError::Http(HttpError { kind: "body", message }))
     }
 
@@ -77,7 +81,7 @@ impl Dse {
             .map_err(|e| GetError::Http(HttpError { kind: "other", message: e.to_string() }))?;
         url.query_pairs_mut().append_pair("name", symbol);
         let retry = Retry { retries: 3, ..Retry::default() };
-        http::get(&self.client, url.as_str(), PAGE_HEADERS, retry, cancel, |_, _, _| {}).await
+        http::get(&self.client, url.as_str(), PAGE_HEADERS, retry, cancel, self.metrics, |_, _, _| {}).await
     }
 }
 

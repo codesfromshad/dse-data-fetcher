@@ -18,10 +18,15 @@ export const logTimestamp = (d = new Date()) => `${ymd(d)}T${hms(d)}.${pad(d.get
 /** HH:mm:ss.SSS — the short form shown in the log view. */
 export const shortTime = (d = new Date()) => `${hms(d)}.${pad(d.getMilliseconds(), 3)}`;
 
-/** H:MM:SS for a live elapsed counter. */
-export function formatClock(ms: number) {
-  const total = Math.floor(ms / 1000);
+/**
+ * Stopwatch format: M:SS.ff, or H:MM:SS.ff past an hour. `digits` is the
+ * fraction: 2 (hundredths, for a live counter) or 3 (milliseconds).
+ */
+export function formatElapsed(ms: number, digits: 2 | 3 = 3) {
+  const t = Math.max(0, ms);
+  const total = Math.floor(t / 1000);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
-  return `${h ? `${h}:` : ''}${h ? pad(m) : m}:${pad(total % 60)}`;
+  const fraction = digits === 3 ? Math.floor(t % 1000) : Math.floor((t % 1000) / 10);
+  return `${h ? `${h}:${pad(m)}` : m}:${pad(total % 60)}.${pad(fraction, digits)}`;
 }

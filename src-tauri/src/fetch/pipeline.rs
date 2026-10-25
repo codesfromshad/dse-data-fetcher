@@ -11,6 +11,7 @@ use super::{
     dse::{is_treasury_bond, Dse},
     http::{describe_error, Cancelled, GetError, HttpError},
     log::{hl, hl_as, parts, pill, Level, Part, Tone},
+    metrics::{format_bytes, format_rate, Metrics, Snapshot},
     parse::{parse_company_page, CompanyRow, ParseResult},
     time::format_duration,
     workbook::incomplete_fields,
@@ -47,6 +48,8 @@ pub trait Sink: Sync {
 pub struct Options<'a> {
     pub base_url: &'a str,
     pub cancel: &'a CancellationToken,
+    /// Byte/request counters for every request of the run.
+    pub metrics: &'a Metrics,
     pub sink: &'a dyn Sink,
     /// Retries per company page, read before each retry. `None` = unlimited.
     pub max_retries: &'a (dyn Fn() -> Option<u32> + Sync),
@@ -102,7 +105,7 @@ fn wait_for(attempt: u32, options: &Options) -> Duration {
     options.retry_unit.saturating_mul(factor).min(options.retry_cap)
 }
 
-async fn fetch_company(dse: &Dse, symbol: &str, cancel: &CancellationToken) -> Result<Result<ParseResult, String>, Cancelled> {
+async fn fetch_company(dse: &Dse<'_>, symbol: &str, cancel: &CancellationToken) -> Result<Result<ParseResult, String>, Cancelled> {
     let html = match dse.fetch_company_html(symbol, cancel).await {
         Ok(html) => html,
         Err(GetError::Cancelled) => return Err(Cancelled),
@@ -115,7 +118,7 @@ async fn fetch_company(dse: &Dse, symbol: &str, cancel: &CancellationToken) -> R
 }
 
 pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
-    let Options { base_url, cancel, sink, max_retries, .. } = options;
+    let Options { base_url, cancel, sink, max_retries, metrics, .. } = options;
     let shared = Mutex::new(Shared::default());
     let report = |stage: Stage, status: String| sink.progress(stage, status, shared.lock().unwrap().counts);
     let retry_logger = |what: &'static str| {
@@ -131,7 +134,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
         }
     };
 
-    let dse = Dse::new(base_url);
+    let dse = Dse::new(base_url, metrics);
     report(Stage::Connecting, format!("Fetching cookie from {base_url}..."));
     dse.fetch_cookie(cancel, retry_logger("Fetching the cookie")).await?;
     sink.log(Level::Success, parts![format!("Cookie fetched from {base_url} successfully!")]);
@@ -286,8 +289,9 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
     Ok(Fetched { rows, counts, failed_symbols: failed, incomplete_symbols: incomplete })
 }
 
-/// The "Fetching COMPLETE" line plus failed/incomplete symbol lists.
-pub fn log_complete(sink: &dyn Sink, fetched: &Fetched, elapsed: Duration) {
+/// The "Fetching COMPLETE" line plus failed/incomplete symbol lists, and the
+/// network summary when metrics are on.
+pub fn log_complete(sink: &dyn Sink, fetched: &Fetched, elapsed: Duration, network: Option<&Snapshot>) {
     let incomplete = &fetched.incomplete_symbols;
     let c = fetched.counts;
     let failed_part = if c.failed > 0 { hl_as(format!("{} failed", c.failed), Tone::Danger) } else { "0 failed".into() };
@@ -308,6 +312,24 @@ pub fn log_complete(sink: &dyn Sink, fetched: &Fetched, elapsed: Duration) {
             pill(format_duration(elapsed), Tone::Subtle),
         ],
     );
+    if let Some(n) = network {
+        sink.log(
+            Level::Info,
+            parts![
+                "Network: ",
+                hl(format_bytes(n.transferred)),
+                " transferred, ",
+                hl(format_bytes(n.processed)),
+                " processed in ",
+                hl(n.requests),
+                " requests. Average ",
+                hl(format_rate(n.average_rate)),
+                ", peak ",
+                hl(format_rate(n.peak_rate)),
+                ".",
+            ],
+        );
+    }
     if !fetched.failed_symbols.is_empty() {
         sink.log(Level::Warn, parts!["Failed symbols: ", hl(fetched.failed_symbols.join(", "))]);
     }
@@ -404,6 +426,7 @@ mod tests {
         let sink = VecSink::default();
         let cancel = CancellationToken::new();
         let reads = AtomicUsize::new(0);
+        let metrics = Metrics::default();
         let max_retries = || {
             reads.fetch_add(1, Ordering::Relaxed);
             Some(2)
@@ -411,6 +434,7 @@ mod tests {
         let fetched = fetch_all(Options {
             base_url: &base,
             cancel: &cancel,
+            metrics: &metrics,
             sink: &sink,
             max_retries: &max_retries,
             retry_unit: Duration::from_millis(1),
@@ -427,6 +451,11 @@ mod tests {
         assert_eq!(fetched.rows[1].yesterdays_closing_price, Some(20.0));
         assert_eq!(fetched.rows[0].yesterdays_closing_price, None);
         assert!(reads.load(Ordering::Relaxed) > 0, "max_retries is read live");
+        // Every response is counted; the fake server doesn't compress, so
+        // processed == transferred.
+        assert!(metrics.requests() >= 8, "requests: {}", metrics.requests());
+        assert!(metrics.transferred() > 0);
+        assert_eq!(metrics.processed(), metrics.transferred());
 
         let logs = sink.0.into_inner().unwrap();
         let has = |level: Level, needle: &str| logs.iter().any(|(l, t)| *l == level && t.contains(needle));
@@ -438,14 +467,19 @@ mod tests {
         assert!(has(Level::Error, "Failed to fetch stock data for BROKEN after 3 attempts: company name not found on page"));
 
         let mut complete = VecSink::default();
-        log_complete(&complete, &fetched, Duration::from_millis(1500));
+        let network = Snapshot { transferred: 2048, processed: 8192, requests: 9, rate: 0.0, peak_rate: 4096.0, average_rate: 1024.0 };
+        log_complete(&complete, &fetched, Duration::from_millis(1500), Some(&network));
         let lines = std::mem::take(complete.0.get_mut().unwrap());
         assert_eq!(
             lines[0].1,
             "Fetching COMPLETE for all 6 symbols (3 fetched, 2 skipped, 1 failed). Elapsed time: 00:00:01.500"
         );
-        assert_eq!(lines[1].1, "Failed symbols: BROKEN");
-        assert_eq!(lines[2].1, "Symbols with blank (NaN/missing) values: BLANKY");
+        assert_eq!(
+            lines[1].1,
+            "Network: 2.00 KB transferred, 8.00 KB processed in 9 requests. Average 1.00 KB/s, peak 4.00 KB/s."
+        );
+        assert_eq!(lines[2].1, "Failed symbols: BROKEN");
+        assert_eq!(lines[3].1, "Symbols with blank (NaN/missing) values: BLANKY");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -457,6 +491,7 @@ mod tests {
         let result = fetch_all(Options {
             base_url: &base,
             cancel: &cancel,
+            metrics: &Metrics::default(),
             sink: &sink,
             max_retries: &|| None,
             retry_unit: Duration::from_millis(1),

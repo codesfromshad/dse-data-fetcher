@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { describeError } from '../lib/errors';
 import { checkDse } from '../lib/fetch';
 import {
   checkOnline,
@@ -10,6 +9,15 @@ import {
   setSpreadsheetApp,
   type SpreadsheetStatus,
 } from '../lib/native';
+import {
+  appCheckProblem,
+  dseProblem,
+  missingAppProblem,
+  noAppProblem,
+  offlineProblem,
+  tempProblem,
+  type Problem,
+} from '../lib/problems';
 
 export type CheckId = 'internet' | 'dse' | 'temp' | 'spreadsheet';
 export type CheckState = 'pending' | 'running' | 'ok' | 'warning' | 'error' | 'skipped';
@@ -18,7 +26,10 @@ export interface Check {
   id: CheckId;
   label: string;
   state: CheckState;
+  /** Short status when it passed ("Reachable · 182 ms", the app name...). */
   detail: string;
+  /** What went wrong and what to do, when it didn't pass. */
+  problem?: Problem;
 }
 
 export interface CheckSummary {
@@ -35,16 +46,24 @@ const INITIAL: Check[] = [
   { id: 'spreadsheet', label: 'Spreadsheet application', state: 'pending', detail: '' },
 ];
 
-function spreadsheetCheck(s: SpreadsheetStatus): Pick<Check, 'state' | 'detail'> {
+function spreadsheetCheck(s: SpreadsheetStatus): Partial<Check> {
   if (s.customPath) {
     return s.customApp
-      ? { state: 'ok', detail: `${s.customApp.name} (chosen in Settings)` }
-      : { state: 'warning', detail: `The chosen app is missing: ${s.customPath}` };
+      ? { state: 'ok', detail: `${s.customApp.name} (chosen in Settings)`, problem: undefined }
+      : problemCheck(missingAppProblem(s.customPath));
   }
   return s.systemDefault
-    ? { state: 'ok', detail: s.systemDefault.name }
-    : { state: 'warning', detail: 'No app is set up to open .xlsx files.' };
+    ? { state: 'ok', detail: s.systemDefault.name, problem: undefined }
+    : problemCheck(noAppProblem());
 }
+
+const problemCheck = (problem: Problem): Partial<Check> => ({ state: problem.severity, detail: problem.title, problem });
+
+/** The checks that didn't pass, errors first. */
+export const problemsOf = (checks: Check[]) =>
+  checks
+    .filter((c): c is Check & { problem: Problem } => !!c.problem)
+    .sort((a, b) => Number(b.problem.severity === 'error') - Number(a.problem.severity === 'error'));
 
 export function useSystemCheck() {
   const [checks, setChecks] = useState<Check[]>(INITIAL);
@@ -70,14 +89,12 @@ export function useSystemCheck() {
   const run = useCallback(() => {
     if (inFlight.current) return inFlight.current;
     setRunning(true);
-    setChecks(INITIAL.map((c) => ({ ...c, state: 'running', detail: 'Checking…' })));
+    setChecks(INITIAL.map((c) => ({ ...c, state: 'running', detail: 'Checking…', problem: undefined })));
 
     const internet = checkOnline()
       .catch(() => false)
       .then((ok) => {
-        set('internet', ok
-          ? { state: 'ok', detail: 'Connected' }
-          : { state: 'error', detail: 'Offline: couldn’t resolve www.google.com.' });
+        set('internet', ok ? { state: 'ok', detail: 'Connected' } : problemCheck(offlineProblem()));
         return ok;
       });
 
@@ -91,7 +108,7 @@ export function useSystemCheck() {
         set('dse', { state: 'ok', detail: `Reachable · ${ms} ms` });
         return true;
       } catch (error) {
-        set('dse', { state: 'error', detail: `Not reachable: ${describeError(error)}` });
+        set('dse', problemCheck(dseProblem(error)));
         return false;
       }
     });
@@ -102,14 +119,14 @@ export function useSystemCheck() {
         return true;
       })
       .catch((error) => {
-        set('temp', { state: 'error', detail: describeError(error) });
+        set('temp', problemCheck(tempProblem(error)));
         return false;
       });
 
     const app = getSpreadsheetStatus()
       .then((status) => effectiveApp(applySpreadsheet(status)) !== null)
       .catch((error) => {
-        set('spreadsheet', { state: 'warning', detail: `Couldn’t check: ${describeError(error)}` });
+        set('spreadsheet', problemCheck(appCheckProblem(error)));
         return false;
       });
 

@@ -13,7 +13,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { CopyRegular } from '@fluentui/react-icons';
-import type { LegalDoc } from '../lib/content';
+import type { LegalDoc } from '../lib/legal';
 
 const useStyles = makeStyles({
   surface: { maxWidth: '760px', width: 'calc(100vw - 48px)' },

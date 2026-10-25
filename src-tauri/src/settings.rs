@@ -56,6 +56,9 @@ pub struct Preferences {
     /// the page comes back with missing/NaN values. `None` = keep retrying
     /// until it works (or the user cancels).
     pub fetch_retries: Option<u32>,
+    /// Show data transferred/processed and the transfer rate while fetching
+    /// (progress card and log).
+    pub show_network_metrics: bool,
 }
 
 pub const DEFAULT_FETCH_RETRIES: u32 = 5;
@@ -70,6 +73,7 @@ impl Default for Preferences {
             auto_download_updates: true,
             update_channel: None,
             fetch_retries: Some(DEFAULT_FETCH_RETRIES),
+            show_network_metrics: true,
         }
     }
 }
@@ -119,6 +123,7 @@ mod tests {
         assert!(s.preferences.auto_fetch_on_launch);
         assert!(s.preferences.update_channel.is_none());
         assert_eq!(s.preferences.fetch_retries, Some(DEFAULT_FETCH_RETRIES));
+        assert!(s.preferences.show_network_metrics);
     }
 
     #[test]

@@ -30,7 +30,8 @@ import {
 import { openUrl } from '@tauri-apps/plugin-opener';
 import icon from '../assets/icon.png';
 import { useSettings } from '../hooks/useSettings';
-import { LEGAL_DOCS, RELEASES, type LegalDoc, type LegalDocId } from '../lib/content';
+import { RELEASES } from '../lib/content';
+import { LEGAL_DOCS, type LegalDoc, type LegalDocId } from '../lib/legal';
 import { hasContent, isUnreleased } from '../lib/changelog';
 import {
   APP_NAME,

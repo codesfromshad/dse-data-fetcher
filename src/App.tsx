@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -21,13 +21,12 @@ import {
   SettingsRegular,
 } from '@fluentui/react-icons';
 import icon from './assets/icon.png';
-import { AboutView } from './components/AboutView';
 import { CloseDialog } from './components/CloseDialog';
 import { LogView } from './components/LogView';
 import { ResultBar } from './components/ResultBar';
 import { RunCard } from './components/RunCard';
-import { SettingsView, type SettingsSection } from './components/SettingsView';
-import { CheckStrip, SystemCheckCard } from './components/SystemCheck';
+import type { SettingsSection } from './components/SettingsView';
+import { CheckSummary, SystemCheckCard } from './components/SystemCheck';
 import { UpdateBanner } from './components/UpdateControls';
 import { WhatsNewDialog } from './components/WhatsNewDialog';
 import { useCloseGuard } from './hooks/useCloseGuard';
@@ -38,6 +37,20 @@ import { useUpdater } from './hooks/useUpdater';
 import { APP_NAME, APP_VERSION, displayVersion, IS_PRERELEASE } from './lib/description';
 import { describeError } from './lib/errors';
 import { effectiveApp, openFile } from './lib/native';
+
+// Settings and About aren't needed for the first paint, so they (and the
+// Dropdown/SpinButton/legal texts only they use) load as separate chunks,
+// fetched once the app is idle so switching tabs is still instant.
+const loadSettings = () => import('./components/SettingsView');
+const loadAbout = () => import('./components/AboutView');
+const SettingsView = lazy(() => loadSettings().then((m) => ({ default: m.SettingsView })));
+const AboutView = lazy(() => loadAbout().then((m) => ({ default: m.AboutView })));
+
+function preloadPages() {
+  const run = () => void Promise.all([loadSettings(), loadAbout()]).catch(() => {});
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 2000 });
+  else setTimeout(run, 500);
+}
 
 const useStyles = makeStyles({
   shell: {
@@ -58,6 +71,15 @@ const useStyles = makeStyles({
   logo: { width: '24px', height: '24px' },
   appName: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400 },
   spacer: { flex: 1 },
+  dot: {
+    display: 'inline-block',
+    width: '6px',
+    height: '6px',
+    marginLeft: '6px',
+    marginBottom: '6px',
+    borderRadius: '50%',
+    backgroundColor: tokens.colorBrandBackground,
+  },
   content: {
     flex: 1,
     minHeight: 0,
@@ -99,6 +121,8 @@ export default function App() {
   // On launch: run the system check, then start fetching (like the CLI did)
   // only if everything passed and auto-fetch is on. Otherwise the check card
   // says what's wrong (or waits for Start fetch).
+  useEffect(preloadPages, []);
+
   const booted = useRef(false);
   const { start } = run;
   const { run: runCheck } = system;
@@ -182,11 +206,23 @@ export default function App() {
             )}
 
             {run.phase === 'idle' ? (
-              <SystemCheckCard system={system} onChooseApp={chooseApp} onStart={startFetch} />
+              <SystemCheckCard
+                system={system}
+                onChooseApp={chooseApp}
+                onStart={startFetch}
+                onDetails={() => openSettings('system')}
+              />
             ) : (
               <>
-                <CheckStrip checks={system.checks} onDetails={() => openSettings('system')} />
-                <RunCard phase={run.phase} progress={run.progress} startedAt={run.startedAt} finishedAt={run.finishedAt} />
+                <CheckSummary system={system} onChooseApp={chooseApp} onDetails={() => openSettings('system')} />
+                <RunCard
+                  phase={run.phase}
+                  progress={run.progress}
+                  startedAt={run.startedAt}
+                  finishedAt={run.finishedAt}
+                  network={run.network}
+                  showNetwork={settings.showNetworkMetrics}
+                />
               </>
             )}
 
@@ -209,10 +245,12 @@ export default function App() {
             <LogView logs={run.logs} onClear={run.clearLogs} />
           </>
         )}
-        {page === 'settings' && (
-          <SettingsView system={system} section={settingsSection} onSectionChange={setSettingsSection} />
-        )}
-        {page === 'about' && <AboutView />}
+        <Suspense fallback={null}>
+          {page === 'settings' && (
+            <SettingsView system={system} section={settingsSection} onSectionChange={setSettingsSection} />
+          )}
+          {page === 'about' && <AboutView />}
+        </Suspense>
       </main>
 
       <CloseDialog locked={close.locked} onRetry={close.retry} onCloseAnyway={close.closeAnyway} onStay={close.stay} />
@@ -223,18 +261,5 @@ export default function App() {
 
 /** Small dot on a tab, like an app's "update available" hint. */
 function PresenceDot() {
-  return (
-    <span
-      aria-label="Update ready"
-      style={{
-        display: 'inline-block',
-        width: 6,
-        height: 6,
-        marginLeft: 6,
-        marginBottom: 6,
-        borderRadius: '50%',
-        backgroundColor: tokens.colorBrandBackground,
-      }}
-    />
-  );
+  return <span aria-label="Update ready" className={useStyles().dot} />;
 }

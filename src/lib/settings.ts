@@ -15,6 +15,8 @@ export interface Preferences {
   updateChannel: UpdateChannel | null;
   /** Retries per company page (failed request or NaN/missing values). null = unlimited. */
   fetchRetries: number | null;
+  /** Data transferred/processed and transfer rate while fetching. */
+  showNetworkMetrics: boolean;
 }
 
 export const DEFAULT_FETCH_RETRIES = 5;
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoDownloadUpdates: true,
   updateChannel: null,
   fetchRetries: DEFAULT_FETCH_RETRIES,
+  showNetworkMetrics: true,
   lastUpdateCheck: null,
   lastSeenVersion: null,
 };
@@ -47,6 +50,7 @@ export const preferencesOf = (s: Settings): Preferences => ({
   autoDownloadUpdates: s.autoDownloadUpdates,
   updateChannel: s.updateChannel,
   fetchRetries: s.fetchRetries,
+  showNetworkMetrics: s.showNetworkMetrics,
 });
 
 export const getSettings = () => invoke<Settings>('get_settings');

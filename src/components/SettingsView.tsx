@@ -32,6 +32,7 @@ import {
   BranchForkRegular,
   DarkThemeRegular,
   DataTrendingRegular,
+  DataUsageRegular,
   DocumentTableRegular,
   DocumentTextRegular,
   FolderOpenRegular,
@@ -218,6 +219,18 @@ function FetchingSection({ system, act }: { system: SystemCheck; act: Act }) {
 
       <SettingsGroup title="While fetching">
         <RetriesRow act={act} />
+        <SettingRow
+          icon={<DataUsageRegular />}
+          title="Show network metrics"
+          description="Data transferred and processed, transfer speed and request count, on the progress card and in the activity log."
+        >
+          <Switch
+            checked={settings.showNetworkMetrics}
+            onChange={(_, d) => void act(() => update({ showNetworkMetrics: d.checked }))()}
+            label={settings.showNetworkMetrics ? 'On' : 'Off'}
+            labelPosition="before"
+          />
+        </SettingRow>
       </SettingsGroup>
 
       <SettingsGroup title="When a fetch finishes">

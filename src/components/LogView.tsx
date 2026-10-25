@@ -1,6 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  Badge,
   Button,
   Caption1,
   Subtitle2,
@@ -10,8 +9,8 @@ import {
   Tooltip,
   makeStyles,
   mergeClasses,
+  shorthands,
   tokens,
-  type BadgeProps,
 } from '@fluentui/react-components';
 import { ArrowDownRegular, CopyRegular, DeleteRegular, TextBulletListLtrRegular } from '@fluentui/react-icons';
 import { entryToText, levelLabel, type LogEntry, type LogLevel, type LogPart, type Tone } from '../lib/log';
@@ -63,14 +62,63 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     whiteSpace: 'nowrap',
   },
-  level: { justifySelf: 'start' },
   message: { overflowWrap: 'anywhere', color: tokens.colorNeutralForeground1 },
   accent: { color: tokens.colorBrandForeground1, fontWeight: tokens.fontWeightSemibold },
   success: { color: tokens.colorPaletteGreenForeground1, fontWeight: tokens.fontWeightSemibold },
   info: { color: tokens.colorPaletteBlueForeground2, fontWeight: tokens.fontWeightSemibold },
   danger: { color: tokens.colorPaletteRedForeground1, fontWeight: tokens.fontWeightSemibold },
   subtle: { color: tokens.colorNeutralForeground3 },
-  inlineBadge: { verticalAlign: 'baseline', margin: `0 2px` },
+
+  // Pills are plain spans styled like Fluent's Badge: hundreds of rows of
+  // full Badge components cost a lot more to mount than they look.
+  pill: {
+    display: 'inline-block',
+    boxSizing: 'border-box',
+    borderRadius: tokens.borderRadiusCircular,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorTransparentStroke}`,
+    fontWeight: tokens.fontWeightSemibold,
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+  },
+  // INFO / WARNING... beside each line (Badge size="small").
+  levelPill: {
+    justifySelf: 'start',
+    minWidth: '16px',
+    padding: '0 4px',
+    fontSize: tokens.fontSizeBase100,
+    lineHeight: '14px',
+  },
+  // COMPLETE, the elapsed time... inside a message: same size as the text.
+  inlinePill: {
+    margin: '0 2px',
+    padding: `0 ${tokens.spacingHorizontalS}`,
+    fontSize: tokens.fontSizeBase300,
+    lineHeight: tokens.lineHeightBase300,
+  },
+  'tint-success': {
+    backgroundColor: tokens.colorPaletteGreenBackground1,
+    color: tokens.colorPaletteGreenForeground1,
+    ...shorthands.borderColor(tokens.colorPaletteGreenBorder1),
+  },
+  'tint-informative': {
+    backgroundColor: tokens.colorNeutralBackground4,
+    color: tokens.colorNeutralForeground3,
+    ...shorthands.borderColor(tokens.colorNeutralStroke2),
+  },
+  'tint-warning': {
+    backgroundColor: tokens.colorPaletteYellowBackground1,
+    color: tokens.colorPaletteYellowForeground1,
+    ...shorthands.borderColor(tokens.colorPaletteYellowBorder1),
+  },
+  'tint-danger': {
+    backgroundColor: tokens.colorPaletteRedBackground1,
+    color: tokens.colorPaletteRedForeground1,
+    ...shorthands.borderColor(tokens.colorPaletteRedBorder1),
+  },
+  'filled-brand': { backgroundColor: tokens.colorBrandBackground, color: tokens.colorNeutralForegroundOnBrand },
+  'filled-success': { backgroundColor: tokens.colorPaletteGreenBackground3, color: tokens.colorNeutralForegroundOnBrand },
+  'filled-informative': { backgroundColor: tokens.colorNeutralBackground5, color: tokens.colorNeutralForeground3 },
+  'filled-danger': { backgroundColor: tokens.colorPaletteRedBackground3, color: tokens.colorNeutralForegroundOnBrand },
   empty: {
     height: '100%',
     display: 'grid',
@@ -85,32 +133,37 @@ const useStyles = makeStyles({
   jumpWrap: { position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
 });
 
-const LEVEL_COLOR: Record<LogLevel, BadgeProps['color']> = {
-  success: 'success',
-  info: 'informative',
-  warn: 'warning',
-  error: 'danger',
+type Styles = ReturnType<typeof useStyles>;
+
+const LEVEL_PILL: Record<LogLevel, keyof Styles> = {
+  success: 'tint-success',
+  info: 'tint-informative',
+  warn: 'tint-warning',
+  error: 'tint-danger',
 };
 
-const BADGE_COLOR: Record<Tone, BadgeProps['color']> = {
-  accent: 'brand',
-  success: 'success',
-  info: 'informative',
-  danger: 'danger',
-  subtle: 'informative',
+const INLINE_PILL: Record<Tone, keyof Styles> = {
+  accent: 'filled-brand',
+  success: 'filled-success',
+  info: 'filled-informative',
+  danger: 'filled-danger',
+  subtle: 'tint-informative',
 };
 
-function Part({ part }: { part: LogPart }) {
-  const styles = useStyles();
-  if (typeof part === 'string') return <>{part}</>;
+function renderPart(part: LogPart, i: number, styles: Styles) {
+  if (typeof part === 'string') return part;
   if (part.badge) {
     return (
-      <Badge className={styles.inlineBadge} size="small" appearance={part.tone === 'subtle' ? 'tint' : 'filled'} color={BADGE_COLOR[part.tone]}>
+      <span key={i} className={mergeClasses(styles.pill, styles.inlinePill, styles[INLINE_PILL[part.tone]])}>
         {part.text}
-      </Badge>
+      </span>
     );
   }
-  return <span className={styles[part.tone]}>{part.text}</span>;
+  return (
+    <span key={i} className={styles[part.tone]}>
+      {part.text}
+    </span>
+  );
 }
 
 const Row = memo(function Row({ entry }: { entry: LogEntry }) {
@@ -121,14 +174,8 @@ const Row = memo(function Row({ entry }: { entry: LogEntry }) {
       title={entry.time}
     >
       <span className={styles.time}>{entry.shortTime}</span>
-      <Badge className={styles.level} size="small" appearance="tint" color={LEVEL_COLOR[entry.level]}>
-        {levelLabel(entry.level)}
-      </Badge>
-      <span className={styles.message}>
-        {entry.parts.map((part, i) => (
-          <Part key={i} part={part} />
-        ))}
-      </span>
+      <span className={mergeClasses(styles.pill, styles.levelPill, styles[LEVEL_PILL[entry.level]])}>{levelLabel(entry.level)}</span>
+      <span className={styles.message}>{entry.parts.map((part, i) => renderPart(part, i, styles))}</span>
     </div>
   );
 });
@@ -143,11 +190,9 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
   const [copied, setCopied] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
-  const visible = useMemo(
-    () => (filter === 'all' ? logs : logs.filter((e) => e.level === 'warn' || e.level === 'error')),
-    [logs, filter],
-  );
-  const issueCount = useMemo(() => logs.filter((e) => e.level === 'warn' || e.level === 'error').length, [logs]);
+  const issues = useMemo(() => logs.filter((e) => e.level === 'warn' || e.level === 'error'), [logs]);
+  const visible = filter === 'all' ? logs : issues;
+  const issueCount = issues.length;
 
   // Stick to the bottom while following.
   useLayoutEffect(() => {
