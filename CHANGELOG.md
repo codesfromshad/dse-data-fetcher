@@ -10,6 +10,14 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Added
+
+- **Retries per company** setting in Settings → Fetching: choose how many times a company page is fetched again, or turn on **Unlimited** to keep trying until it works.
+
+### Fixed
+
+- Company pages that came back with NaN or missing values (prices, market cap, dates…) are now detected and fetched again, with a warning in the log. If retries run out, the row is kept with those cells blank instead of `NaN`, and the summary lists the affected symbols.
+
 ## [2.0.0-beta.1] - 2026-10-25
 
 ### Added

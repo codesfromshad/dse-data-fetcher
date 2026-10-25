@@ -9,7 +9,29 @@ import { fileTimestamp, formatDuration } from './time';
 // Company pages fetched at once. A small pool is gentler on DSE than firing
 // every symbol in parallel, and barely slower.
 const CONCURRENCY = 10;
-const MAX_ATTEMPTS = 6;
+// Wait between retries of one company page: 1s, 2s, 4s... capped here.
+const MAX_RETRY_WAIT_MS = 15_000;
+
+const COLUMN_LABELS = new Map(COLUMNS.map((c) => [c.key, String(c.header)]));
+
+/**
+ * Fields that came back NaN or empty. DSE sometimes serves a page with blanks
+ * where the numbers should be; fetching it again usually fixes that.
+ */
+export function incompleteFields(row: CompanyRow) {
+  return (Object.keys(row) as (keyof CompanyRow)[])
+    .filter((key) => {
+      const value = row[key];
+      return typeof value === 'number' ? !Number.isFinite(value) : value === '';
+    })
+    .map((key) => COLUMN_LABELS.get(key) ?? key);
+}
+
+/** NaN cells would show up as errors in Excel; leave them blank instead. */
+const blankInvalid = (row: CompanyRow) =>
+  Object.fromEntries(
+    Object.entries(row).map(([k, v]) => [k, typeof v === 'number' && !Number.isFinite(v) ? null : v]),
+  ) as unknown as CompanyRow;
 
 export class OfflineError extends Error {
   constructor() {
@@ -48,6 +70,8 @@ export interface FetchCallbacks {
   signal: AbortSignal;
   /** Open the workbook when done. False when no spreadsheet app is available. */
   openAfter: boolean;
+  /** Retries per company page, read before each retry. null = unlimited. */
+  maxRetries: () => number | null;
 }
 
 async function runPool<T>(items: T[], limit: number, signal: AbortSignal, worker: (item: T) => Promise<void>) {
@@ -77,7 +101,7 @@ async function buildWorkbook(rows: CompanyRow[]) {
 }
 
 /** The whole fetch run. UI-agnostic: talks to the outside world through callbacks. */
-export async function runFetch({ log, progress, signal, openAfter }: FetchCallbacks): Promise<FetchResult> {
+export async function runFetch({ log, progress, signal, openAfter, maxRetries }: FetchCallbacks): Promise<FetchResult> {
   const startedAt = performance.now();
   const counts: Counts = { total: 0, fetched: 0, skipped: 0, failed: 0 };
   const report = (stage: Stage, status: string) => progress({ stage, status, counts: { ...counts } });
@@ -100,6 +124,7 @@ export async function runFetch({ log, progress, signal, openAfter }: FetchCallba
   log('success', `Ticker symbols retrieved from ${DSE_URL} successfully! (`, hl(symbols.length), ' symbols)');
 
   const failedSymbols: string[] = [];
+  const incompleteSymbols: string[] = [];
   const rows: CompanyRow[] = [];
   const companyProgress = () => {
     const done = counts.fetched + counts.skipped + counts.failed;
@@ -117,30 +142,63 @@ export async function runFetch({ log, progress, signal, openAfter }: FetchCallba
         return;
       }
 
+      // The best incomplete copy so far, kept if we run out of retries.
+      let partial: { row: CompanyRow; missing: string[] } | null = null;
+
       for (let attempt = 1; ; attempt++) {
         throwIfAborted(signal);
+        const limit = maxRetries();
+        const canRetry = limit === null || attempt <= limit;
+        const retryLabel = limit === null ? `retry ${attempt}` : `retry ${attempt}/${limit}`;
+        const attempts = hl(`${attempt} ${attempt === 1 ? 'attempt' : 'attempts'}`);
+
+        let result: Awaited<ReturnType<typeof fetchCompany>>;
         try {
-          const result = await fetchCompany(symbol, parser, signal);
-          if ('skip' in result) {
-            counts.skipped++;
-            log('info', `Skipping ${result.skip} `, hl(symbol), '...');
-          } else {
-            rows.push(result);
-            counts.fetched++;
-            log('success', 'Fetched stock data for ', hl(symbol));
-          }
-          break;
+          result = await fetchCompany(symbol, parser, signal);
         } catch (error) {
           throwIfAborted(signal);
-          if (attempt >= MAX_ATTEMPTS) {
+          if (canRetry) {
+            log('warn', 'Failed to fetch stock data for ', hl(symbol), ' ', hl(`(${describeError(error)})`, 'subtle'), `. Retrying (${retryLabel})...`);
+            await sleep(Math.min(1000 * 2 ** (attempt - 1), MAX_RETRY_WAIT_MS), signal);
+            continue;
+          }
+          if (partial) {
+            rows.push(blankInvalid(partial.row));
+            counts.fetched++;
+            incompleteSymbols.push(symbol);
+            log('warn', 'Kept incomplete data for ', hl(symbol), ' after ', attempts, '. Blank: ', hl(partial.missing.join(', '), 'subtle'));
+          } else {
             counts.failed++;
             failedSymbols.push(symbol);
-            log('error', 'Failed to fetch stock data for ', hl(symbol), ' after ', hl(attempt), ' attempts: ', hl(describeError(error), 'subtle'));
-            break;
+            log('error', 'Failed to fetch stock data for ', hl(symbol), ' after ', attempts, ': ', hl(describeError(error), 'subtle'));
           }
-          log('warn', 'Failed to fetch stock data for ', hl(symbol), ' ', hl(`(${describeError(error)})`, 'subtle'), `. Retrying (${attempt}/${MAX_ATTEMPTS - 1})...`);
-          await sleep(Math.min(1000 * 2 ** (attempt - 1), 15_000), signal);
+          break;
         }
+
+        if ('skip' in result) {
+          counts.skipped++;
+          log('info', `Skipping ${result.skip} `, hl(symbol), '...');
+          break;
+        }
+
+        const missing = incompleteFields(result);
+        if (!missing.length) {
+          rows.push(result);
+          counts.fetched++;
+          log('success', 'Fetched stock data for ', hl(symbol), attempt > 1 ? ` (after ${attempt} attempts)` : '');
+          break;
+        }
+
+        if (!partial || missing.length <= partial.missing.length) partial = { row: result, missing };
+        if (!canRetry) {
+          rows.push(blankInvalid(partial.row));
+          counts.fetched++;
+          incompleteSymbols.push(symbol);
+          log('warn', 'Kept incomplete data for ', hl(symbol), ' after ', attempts, '. Blank: ', hl(partial.missing.join(', '), 'subtle'));
+          break;
+        }
+        log('warn', 'Incomplete data for ', hl(symbol), ' ', hl(`(NaN/missing: ${missing.join(', ')})`, 'subtle'), `. Fetching again (${retryLabel})...`);
+        await sleep(Math.min(1000 * 2 ** (attempt - 1), MAX_RETRY_WAIT_MS), signal);
       }
       companyProgress();
     });
@@ -159,6 +217,10 @@ export async function runFetch({ log, progress, signal, openAfter }: FetchCallba
     '). Elapsed time: ', pill(formatDuration(elapsedMs), 'subtle'),
   );
   if (failedSymbols.length) log('warn', 'Failed symbols: ', hl(failedSymbols.join(', ')));
+  if (incompleteSymbols.length) {
+    incompleteSymbols.sort();
+    log('warn', 'Symbols with blank (NaN/missing) values: ', hl(incompleteSymbols.join(', ')));
+  }
 
   report('writing', 'Creating spreadsheet...');
   const fileName = `temp_stock_data_${fileTimestamp()}.xlsx`;

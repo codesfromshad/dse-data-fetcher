@@ -3,6 +3,7 @@ import { CancelledError, describeError } from '../lib/http';
 import type { LogEntry, LogLevel, LogPart } from '../lib/log';
 import { OfflineError, runFetch, type FetchResult, type Progress } from '../lib/pipeline';
 import { logTimestamp, shortTime } from '../lib/time';
+import { useSettings } from './useSettings';
 
 export type Phase = 'idle' | 'running' | 'done' | 'failed' | 'cancelled';
 
@@ -35,6 +36,11 @@ export function useFetchRun() {
   const pendingLogs = useRef<LogEntry[]>([]);
   const pendingProgress = useRef<Progress | null>(null);
   const nextId = useRef(0);
+
+  // Read at every retry, so changing the setting mid-run takes effect at once.
+  const { settings } = useSettings();
+  const retriesRef = useRef(settings.fetchRetries);
+  retriesRef.current = settings.fetchRetries;
 
   const flush = useCallback(() => {
     if (pendingLogs.current.length) {
@@ -74,7 +80,7 @@ export function useFetchRun() {
     setProgress({ ...EMPTY_PROGRESS, status: 'Starting...' });
     if (nextId.current > 0) log('info', '──────── New run ────────');
 
-    runFetch({ log, progress: (p) => (pendingProgress.current = p), signal: controller.signal, openAfter })
+    runFetch({ log, progress: (p) => (pendingProgress.current = p), signal: controller.signal, openAfter, maxRetries: () => retriesRef.current })
       .then((res) => {
         flush();
         setResult(res);

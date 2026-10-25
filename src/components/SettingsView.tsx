@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge,
   Body1Strong,
@@ -16,6 +16,7 @@ import {
   MessageBar,
   MessageBarBody,
   Option,
+  SpinButton,
   Switch,
   Tab,
   TabList,
@@ -25,6 +26,7 @@ import {
 } from '@fluentui/react-components';
 import {
   ArrowDownloadRegular,
+  ArrowRepeatAllRegular,
   ArrowResetRegular,
   ArrowSyncRegular,
   BranchForkRegular,
@@ -45,7 +47,13 @@ import type { SystemCheck } from '../hooks/useSystemCheck';
 import { APP_VERSION, displayVersion, IS_PRERELEASE } from '../lib/description';
 import { describeError } from '../lib/http';
 import { effectiveApp } from '../lib/native';
-import { openSettingsFolder, type ThemePreference, type UpdateChannel } from '../lib/settings';
+import {
+  DEFAULT_FETCH_RETRIES,
+  MAX_FETCH_RETRIES,
+  openSettingsFolder,
+  type ThemePreference,
+  type UpdateChannel,
+} from '../lib/settings';
 import { ChangelogDialog } from './ReleaseNotes';
 import { SettingCard, SettingRow, SettingsGroup } from './SettingRow';
 import { CheckList } from './SystemCheck';
@@ -80,6 +88,7 @@ const useStyles = makeStyles({
   },
   title: { marginBottom: tokens.spacingVerticalS },
   dropdown: { minWidth: '210px' },
+  spin: { width: '96px' },
   muted: { color: tokens.colorNeutralForeground3 },
   app: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalM },
   appIcon: { fontSize: '28px', color: tokens.colorPaletteGreenForeground1, flexShrink: 0 },
@@ -207,6 +216,10 @@ function FetchingSection({ system, act }: { system: SystemCheck; act: Act }) {
         </SettingRow>
       </SettingsGroup>
 
+      <SettingsGroup title="While fetching">
+        <RetriesRow act={act} />
+      </SettingsGroup>
+
       <SettingsGroup title="When a fetch finishes">
         <SettingRow
           icon={<OpenRegular />}
@@ -258,6 +271,54 @@ function FetchingSection({ system, act }: { system: SystemCheck; act: Act }) {
         </SettingRow>
       </SettingsGroup>
     </>
+  );
+}
+
+function RetriesRow({ act }: { act: Act }) {
+  const styles = useStyles();
+  const { settings, update } = useSettings();
+  const unlimited = settings.fetchRetries === null;
+  // Remember the number while "Unlimited" is on, so turning it off restores it.
+  const [count, setCount] = useState(settings.fetchRetries ?? DEFAULT_FETCH_RETRIES);
+  useEffect(() => {
+    if (settings.fetchRetries !== null) setCount(settings.fetchRetries);
+  }, [settings.fetchRetries]);
+
+  const save = (value: number) => {
+    const clamped = Math.min(MAX_FETCH_RETRIES, Math.max(0, Math.round(value)));
+    setCount(clamped);
+    if (clamped !== settings.fetchRetries) void act(() => update({ fetchRetries: clamped }))();
+  };
+
+  return (
+    <SettingRow
+      icon={<ArrowRepeatAllRegular />}
+      title="Retries per company"
+      description={
+        unlimited
+          ? 'Keeps fetching a page again until it loads with complete data. Cancel the fetch to stop.'
+          : 'How many times to fetch a page again when it fails or comes back with NaN or missing values. After that, the row is kept with blanks (or marked failed).'
+      }
+    >
+      <SpinButton
+        className={styles.spin}
+        aria-label="Retries per company"
+        disabled={unlimited}
+        min={0}
+        max={MAX_FETCH_RETRIES}
+        value={count}
+        onChange={(_, d) => {
+          const value = d.value ?? (d.displayValue !== undefined ? parseInt(d.displayValue, 10) : NaN);
+          if (Number.isFinite(value)) save(value as number);
+        }}
+      />
+      <Switch
+        checked={unlimited}
+        onChange={(_, d) => void act(() => update({ fetchRetries: d.checked ? null : count }))()}
+        label="Unlimited"
+        labelPosition="before"
+      />
+    </SettingRow>
   );
 }
 

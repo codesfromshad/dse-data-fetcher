@@ -52,7 +52,13 @@ pub struct Preferences {
     pub auto_download_updates: bool,
     /// `None` = follow the installed build: beta builds get the beta channel.
     pub update_channel: Option<UpdateChannel>,
+    /// How many times to fetch a company page again when the request fails or
+    /// the page comes back with missing/NaN values. `None` = keep retrying
+    /// until it works (or the user cancels).
+    pub fetch_retries: Option<u32>,
 }
+
+pub const DEFAULT_FETCH_RETRIES: u32 = 5;
 
 impl Default for Preferences {
     fn default() -> Self {
@@ -63,6 +69,7 @@ impl Default for Preferences {
             check_for_updates: true,
             auto_download_updates: true,
             update_channel: None,
+            fetch_retries: Some(DEFAULT_FETCH_RETRIES),
         }
     }
 }
@@ -111,6 +118,17 @@ mod tests {
         assert_eq!(s.spreadsheet_app, Some(PathBuf::from("C:\\x.exe")));
         assert!(s.preferences.auto_fetch_on_launch);
         assert!(s.preferences.update_channel.is_none());
+        assert_eq!(s.preferences.fetch_retries, Some(DEFAULT_FETCH_RETRIES));
+    }
+
+    #[test]
+    fn unlimited_retries_round_trip() {
+        let mut s = Settings::default();
+        s.preferences.fetch_retries = None;
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains(r#""fetchRetries":null"#));
+        let back: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.preferences.fetch_retries, None);
     }
 
     #[test]

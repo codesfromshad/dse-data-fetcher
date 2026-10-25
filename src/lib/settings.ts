@@ -13,7 +13,12 @@ export interface Preferences {
   autoDownloadUpdates: boolean;
   /** null = follow the installed build (beta builds → beta). */
   updateChannel: UpdateChannel | null;
+  /** Retries per company page (failed request or NaN/missing values). null = unlimited. */
+  fetchRetries: number | null;
 }
+
+export const DEFAULT_FETCH_RETRIES = 5;
+export const MAX_FETCH_RETRIES = 1000;
 
 export interface Settings extends Preferences {
   spreadsheetApp: string | null;
@@ -29,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   checkForUpdates: true,
   autoDownloadUpdates: true,
   updateChannel: null,
+  fetchRetries: DEFAULT_FETCH_RETRIES,
   lastUpdateCheck: null,
   lastSeenVersion: null,
 };
@@ -40,6 +46,7 @@ export const preferencesOf = (s: Settings): Preferences => ({
   checkForUpdates: s.checkForUpdates,
   autoDownloadUpdates: s.autoDownloadUpdates,
   updateChannel: s.updateChannel,
+  fetchRetries: s.fetchRetries,
 });
 
 export const getSettings = () => invoke<Settings>('get_settings');
