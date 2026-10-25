@@ -36,7 +36,7 @@ import { useSettings } from './hooks/useSettings';
 import { useSystemCheck } from './hooks/useSystemCheck';
 import { useUpdater } from './hooks/useUpdater';
 import { APP_NAME, APP_VERSION, displayVersion, IS_PRERELEASE } from './lib/description';
-import { describeError } from './lib/http';
+import { describeError } from './lib/errors';
 import { effectiveApp, openFile } from './lib/native';
 
 const useStyles = makeStyles({

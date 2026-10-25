@@ -11,9 +11,9 @@ import {
 } from '@fluentui/react-components';
 import { AppsAddInRegular, DocumentTableRegular, FolderOpenRegular, OpenRegular, SaveRegular } from '@fluentui/react-icons';
 import { save } from '@tauri-apps/plugin-dialog';
-import { describeError } from '../lib/http';
+import { describeError } from '../lib/errors';
 import { openFile, revealFile, saveCopy } from '../lib/native';
-import type { FetchResult } from '../lib/pipeline';
+import type { FetchResult } from '../lib/fetch';
 
 const useStyles = makeStyles({
   name: { fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 },

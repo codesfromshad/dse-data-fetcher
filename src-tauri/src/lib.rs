@@ -1,22 +1,23 @@
 //! Native side of DSE Data Fetcher.
 //!
-//! The fetch pipeline itself lives in the frontend (TypeScript). Rust provides
-//! what a webview can't do on its own:
-//!   * HTTP without CORS, with a cookie jar per run (replaces curl.exe + -b/-c)
-//!   * a DNS check for "are we online at all"
-//!   * temp-file bookkeeping: write the xlsx, open it, save a copy, delete it,
-//!     and a last-chance cleanup when the app exits.
+//! Everything except drawing the UI happens here:
+//!   * the whole fetch run (see fetch/): HTTP with a cookie jar per run,
+//!     company-page parsing, retries, the xlsx, progress/log events
+//!   * a DNS check for "are we online at all", and a DSE reachability check
+//!   * temp-file bookkeeping: open the xlsx, save a copy, delete it, and a
+//!     last-chance cleanup when the app exits.
 //!   * the startup system check: temp folder, spreadsheet app (with a
 //!     user-chosen override saved in settings.json).
 //!   * settings, app/build info for the About page, and self-update from
 //!     GitHub Releases (see updater.rs).
 
+mod fetch;
 mod settings;
 mod spreadsheet;
 mod updater;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     io::ErrorKind,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -27,13 +28,11 @@ use serde::Serialize;
 use settings::{Preferences, Settings, ThemePreference};
 use spreadsheet::AppInfo;
 use tauri::{
-    ipc::InvokeBody, window::Color, AppHandle, Manager, RunEvent, Runtime, State, Theme, WebviewWindow, WindowEvent,
+    window::Color, AppHandle, Manager, RunEvent, Runtime, State, Theme, WebviewWindow, WindowEvent,
 };
 use tauri_plugin_opener::OpenerExt;
 
 struct AppState {
-    /// Replaced at the start of every run, so each run gets a fresh cookie jar.
-    http: Mutex<reqwest::Client>,
     /// Temp files this app created and must delete on exit.
     temp_files: Mutex<HashSet<PathBuf>>,
     /// Files the UI may open/reveal: temp files plus copies the user saved.
@@ -41,96 +40,10 @@ struct AppState {
     settings: Mutex<Settings>,
 }
 
-fn new_http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .cookie_store(true)
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .expect("failed to build HTTP client")
-}
-
-// ---------------------------------------------------------------------------
-// HTTP
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct HttpError {
-    /// "connect" | "timeout" | "status" | "body" | "other"
-    kind: &'static str,
-    message: String,
-}
-
-impl HttpError {
-    fn from_reqwest(error: reqwest::Error) -> Self {
-        let kind = if error.is_timeout() {
-            "timeout"
-        } else if error.is_connect() {
-            "connect"
-        } else if error.is_body() || error.is_decode() {
-            "body"
-        } else {
-            "other"
-        };
-        // reqwest's top-level message embeds the URL; the root cause is what
-        // actually says what went wrong ("dns error", "connection refused"...).
-        let mut root: &dyn std::error::Error = &error;
-        while let Some(source) = root.source() {
-            root = source;
-        }
-        let message = match kind {
-            "timeout" => "Operation timed out".to_string(),
-            _ => root.to_string(),
-        };
-        Self { kind, message }
-    }
-}
-
-/// Hop-by-hop headers are illegal over HTTP/2 and hyper rejects the request if
-/// they're set, so drop them (curl used to just ignore them).
-fn is_hop_by_hop(name: &str) -> bool {
-    matches!(
-        name.to_ascii_lowercase().as_str(),
-        "connection" | "keep-alive" | "proxy-connection" | "transfer-encoding" | "upgrade"
-    )
-}
-
-/// GET a URL and return the body as text. Non-2xx counts as an error, like
-/// `curl --fail`, so the caller retries instead of parsing an error page.
-#[tauri::command]
-async fn http_get(
-    state: State<'_, AppState>,
-    url: String,
-    headers: HashMap<String, String>,
-    timeout_ms: u64,
-) -> Result<String, HttpError> {
-    let client = state.http.lock().unwrap().clone();
-    let mut request = client.get(&url).timeout(Duration::from_millis(timeout_ms));
-    for (name, value) in headers.iter().filter(|(name, _)| !is_hop_by_hop(name)) {
-        request = request.header(name, value);
-    }
-
-    let response = request.send().await.map_err(HttpError::from_reqwest)?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(HttpError {
-            kind: "status",
-            message: format!("The requested URL returned error: {status}"),
-        });
-    }
-    response.text().await.map_err(HttpError::from_reqwest)
-}
-
-/// Start a new HTTP session (fresh cookie jar).
-#[tauri::command]
-fn reset_http_session(state: State<'_, AppState>) {
-    *state.http.lock().unwrap() = new_http_client();
-}
-
 /// Same check the CLI did: can we resolve www.google.com?
 #[tauri::command]
 async fn check_online() -> bool {
-    tokio::net::lookup_host(("www.google.com", 443)).await.is_ok()
+    fetch::http::check_online().await
 }
 
 // ---------------------------------------------------------------------------
@@ -145,26 +58,16 @@ fn ensure_known(state: &AppState, path: &Path) -> Result<(), String> {
     }
 }
 
-/// Write the workbook to the temp folder. Body: raw bytes. Header
-/// `x-file-name`: the file name (no directories). Returns the full path.
-#[tauri::command]
-fn write_temp_file(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) -> Result<String, String> {
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected the file contents as raw bytes.".into());
-    };
-    let name = request
-        .headers()
-        .get("x-file-name")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Path::new(value).file_name())
-        .ok_or("Missing or invalid x-file-name header.")?;
-
+/// Write a file (the workbook) to the temp folder and track it for cleanup.
+/// `name` must be a bare file name. Returns the full path.
+fn write_temp_file(state: &AppState, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    let name = Path::new(name).file_name().ok_or("Invalid file name.")?;
     let path = std::env::temp_dir().join(name);
     // Track before writing, so even a half-written file gets cleaned up.
     state.temp_files.lock().unwrap().insert(path.clone());
     state.known_files.lock().unwrap().insert(path.clone());
     std::fs::write(&path, bytes).map_err(|e| format!("Couldn't write {}: {e}", path.display()))?;
-    Ok(path.to_string_lossy().into_owned())
+    Ok(path)
 }
 
 #[derive(Serialize)]
@@ -228,11 +131,14 @@ pub(crate) fn delete_all_temp_files<R: Runtime>(app: &AppHandle<R>) {
 /// Open a file with the chosen spreadsheet app, or the system default.
 #[tauri::command]
 fn open_file(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<(), String> {
-    let path = PathBuf::from(path);
-    ensure_known(&state, &path)?;
+    open_known_file(&app, &state, Path::new(&path))
+}
+
+fn open_known_file(app: &AppHandle, state: &AppState, path: &Path) -> Result<(), String> {
+    ensure_known(state, path)?;
     let custom = state.settings.lock().unwrap().spreadsheet_app.clone();
     match custom {
-        Some(program) if program.is_file() => spreadsheet::launch(&program, &path),
+        Some(program) if program.is_file() => spreadsheet::launch(&program, path),
         Some(program) => Err(format!(
             "The chosen spreadsheet app ({}) no longer exists. Pick another one in Settings.",
             program.display()
@@ -457,12 +363,12 @@ pub fn run() {
             let settings = settings::load(app.handle());
             let theme = settings.preferences.theme;
             app.manage(AppState {
-                http: Mutex::new(new_http_client()),
                 temp_files: Mutex::new(HashSet::new()),
                 known_files: Mutex::new(HashSet::new()),
                 settings: Mutex::new(settings),
             });
             app.manage(updater::UpdaterState::default());
+            app.manage(fetch::FetchState::default());
 
             if let Some(window) = app.get_webview_window("main") {
                 apply_theme(&window, theme);
@@ -486,10 +392,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            http_get,
-            reset_http_session,
+            fetch::start_fetch,
+            fetch::cancel_fetch,
+            fetch::check_dse,
             check_online,
-            write_temp_file,
             delete_temp_files,
             open_file,
             reveal_file,

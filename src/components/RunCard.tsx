@@ -16,7 +16,7 @@ import {
   PlayCircleRegular,
 } from '@fluentui/react-icons';
 import type { Phase } from '../hooks/useFetchRun';
-import type { Progress } from '../lib/pipeline';
+import type { Progress } from '../lib/fetch';
 import { formatClock } from '../lib/time';
 
 const useStyles = makeStyles({

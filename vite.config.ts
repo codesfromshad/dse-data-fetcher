@@ -29,5 +29,4 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     chunkSizeWarningLimit: 2000,
   },
-  worker: { format: 'es' },
 });

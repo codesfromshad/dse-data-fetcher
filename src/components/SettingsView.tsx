@@ -45,7 +45,7 @@ import {
 import { useSettings } from '../hooks/useSettings';
 import type { SystemCheck } from '../hooks/useSystemCheck';
 import { APP_VERSION, displayVersion, IS_PRERELEASE } from '../lib/description';
-import { describeError } from '../lib/http';
+import { describeError } from '../lib/errors';
 import { effectiveApp } from '../lib/native';
 import {
   DEFAULT_FETCH_RETRIES,

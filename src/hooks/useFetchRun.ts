@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CancelledError, describeError } from '../lib/http';
+import { describeError } from '../lib/errors';
+import { cancelFetch, isFetchError, startFetch, type FetchEvent, type FetchResult, type Progress } from '../lib/fetch';
 import type { LogEntry, LogLevel, LogPart } from '../lib/log';
-import { OfflineError, runFetch, type FetchResult, type Progress } from '../lib/pipeline';
 import { logTimestamp, shortTime } from '../lib/time';
-import { useSettings } from './useSettings';
 
 export type Phase = 'idle' | 'running' | 'done' | 'failed' | 'cancelled';
 
@@ -23,6 +22,11 @@ export interface RunError {
   offline: boolean;
 }
 
+/**
+ * Drives a fetch run in Rust (src-tauri/src/fetch/) and keeps its log,
+ * progress and result for the UI. The retry setting is read by Rust before
+ * every retry, so changing it mid-run takes effect at once.
+ */
 export function useFetchRun() {
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState<Progress>(EMPTY_PROGRESS);
@@ -32,15 +36,10 @@ export function useFetchRun() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
+  const running = useRef(false);
   const pendingLogs = useRef<LogEntry[]>([]);
   const pendingProgress = useRef<Progress | null>(null);
   const nextId = useRef(0);
-
-  // Read at every retry, so changing the setting mid-run takes effect at once.
-  const { settings } = useSettings();
-  const retriesRef = useRef(settings.fetchRetries);
-  retriesRef.current = settings.fetchRetries;
 
   const flush = useCallback(() => {
     if (pendingLogs.current.length) {
@@ -62,15 +61,21 @@ export function useFetchRun() {
     return () => clearInterval(timer);
   }, [flush]);
 
-  const log = useCallback((level: LogLevel, ...parts: LogPart[]) => {
-    const now = new Date();
-    pendingLogs.current.push({ id: nextId.current++, time: logTimestamp(now), shortTime: shortTime(now), level, parts });
+  const log = useCallback((level: LogLevel, parts: LogPart[], at = new Date()) => {
+    pendingLogs.current.push({ id: nextId.current++, time: logTimestamp(at), shortTime: shortTime(at), level, parts });
   }, []);
 
+  const onEvent = useCallback(
+    (event: FetchEvent) => {
+      if (event.event === 'log') log(event.data.level, event.data.parts, new Date(event.data.time));
+      else pendingProgress.current = event.data;
+    },
+    [log],
+  );
+
   const start = useCallback(({ openAfter = true }: { openAfter?: boolean } = {}) => {
-    if (abortRef.current) return; // already running
-    const controller = new AbortController();
-    abortRef.current = controller;
+    if (running.current) return;
+    running.current = true;
 
     setPhase('running');
     setResult(null);
@@ -78,9 +83,9 @@ export function useFetchRun() {
     setStartedAt(Date.now());
     setFinishedAt(null);
     setProgress({ ...EMPTY_PROGRESS, status: 'Starting...' });
-    if (nextId.current > 0) log('info', '──────── New run ────────');
+    if (nextId.current > 0) log('info', ['──────── New run ────────']);
 
-    runFetch({ log, progress: (p) => (pendingProgress.current = p), signal: controller.signal, openAfter, maxRetries: () => retriesRef.current })
+    startFetch(openAfter, onEvent)
       .then((res) => {
         flush();
         setResult(res);
@@ -88,28 +93,28 @@ export function useFetchRun() {
         setProgress((p) => ({ ...p, status: `Saved ${res.fileName}` }));
       })
       .catch((err: unknown) => {
-        if (err instanceof CancelledError) {
-          log('warn', 'Fetch cancelled.');
-          flush();
+        // Rust logs its own failures; anything else (IPC trouble) we log here.
+        if (!isFetchError(err)) log('error', [`Fetch failed: ${describeError(err)}`]);
+        flush();
+        if (isFetchError(err) && err.kind === 'cancelled') {
           setPhase('cancelled');
           setProgress((p) => ({ ...p, status: 'Cancelled' }));
           return;
         }
-        const offline = err instanceof OfflineError;
-        const message = offline ? (err as Error).message : `Fetch failed: ${describeError(err)}`;
-        log('error', message);
-        flush();
-        setError({ message, offline });
+        const offline = isFetchError(err) && err.kind === 'offline';
+        setError({ message: isFetchError(err) ? err.message : `Fetch failed: ${describeError(err)}`, offline });
         setPhase('failed');
         setProgress((p) => ({ ...p, status: offline ? 'No internet connection' : 'Fetch failed' }));
       })
       .finally(() => {
-        abortRef.current = null;
+        running.current = false;
         setFinishedAt(Date.now());
       });
-  }, [flush, log]);
+  }, [flush, log, onEvent]);
 
-  const cancel = useCallback(() => abortRef.current?.abort(), []);
+  const cancel = useCallback(() => {
+    if (running.current) void cancelFetch();
+  }, []);
 
   const clearLogs = useCallback(() => {
     pendingLogs.current = [];

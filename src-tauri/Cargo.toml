@@ -23,7 +23,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Replaces curl.exe. Default TLS = SChannel on Windows, same as curl.exe used.
 reqwest = { version = "0.12", features = ["cookies", "gzip", "brotli", "deflate"] }
-tokio = { version = "1", features = ["net"] }
+tokio = { version = "1", features = ["macros", "net", "rt", "sync", "time"] }
+tokio-util = "0.7"
+futures-util = "0.3"
+# Company-page parsing (was cheerio) and the workbook (was ExcelJS).
+scraper = { version = "0.29", default-features = false }
+regex = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+rust_xlsxwriter = "0.101"
 
 [target.'cfg(windows)'.dependencies]
 # AssocQueryStringW: which app opens .xlsx files.
@@ -35,3 +42,7 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+[dev-dependencies]
+# The pipeline tests run against a tiny local HTTP server.
+tokio = { version = "1", features = ["rt-multi-thread", "io-util"] }

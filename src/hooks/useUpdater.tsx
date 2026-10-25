@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { describeError } from '../lib/http';
+import { describeError } from '../lib/errors';
 import { deleteTempFiles, type LockedFile } from '../lib/native';
 import { checkForUpdate, downloadUpdate, installUpdate, markUpdateChecked, type UpdateInfo } from '../lib/settings';
 import { useSettings } from './useSettings';
