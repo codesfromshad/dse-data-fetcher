@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.0.0-beta.2] - 2026-10-25
+
 ### Added
 
 - **Retries per company** setting in Settings → Fetching: choose how many times a company page is fetched again, or turn on **Unlimited** to keep trying until it works.
