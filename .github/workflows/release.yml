@@ -1,0 +1,84 @@
+﻿# Builds, signs and publishes a release when a version tag is pushed
+# (`bun run release beta --push` does that), then refreshes the update
+# manifests the app checks.
+#
+# Needs two repository secrets (see `bun run updater:setup`):
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Read version and release notes
+        id: meta
+        shell: bash
+        run: |
+          version=$(bun -e "console.log(require('./package.json').version)")
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+          {
+            echo 'notes<<__RELEASE_NOTES__'
+            bun scripts/release-notes.ts "$version"
+            echo '__RELEASE_NOTES__'
+          } >> "$GITHUB_OUTPUT"
+      - name: Build, sign and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: bun tauri
+          args: --config src-tauri/tauri.updater.conf.json
+          tagName: v__VERSION__
+          releaseName: DSE Data Fetcher __VERSION__
+          releaseBody: ${{ steps.meta.outputs.notes }}
+          releaseDraft: false
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+  manifests:
+    name: Publish update manifests
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: v${{ needs.build.outputs.version }}
+    steps:
+      - name: Copy latest.json to the update channels
+        run: |
+          gh release download "$TAG" --pattern latest.json --dir manifest
+          if ! gh release view updater >/dev/null 2>&1; then
+            gh release create updater --prerelease --title "Update manifests" \
+              --notes "Used by the in-app updater. Don't delete or edit this release."
+          fi
+          cp manifest/latest.json manifest/beta.json
+          gh release upload updater manifest/beta.json --clobber
+          if [ "${{ needs.build.outputs.prerelease }}" = "false" ]; then
+            cp manifest/latest.json manifest/stable.json
+            gh release upload updater manifest/stable.json --clobber
+          fi
