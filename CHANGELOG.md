@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.0.0-beta.4] - 2026-10-25
+
 ### Added
 
 - **Network metrics** while fetching: data transferred (as downloaded, compressed), data processed (decompressed), live transfer speed, average and peak speed, and request count, on the progress card and in the activity log summary. Turn them on or off in Settings → Fetching → **Show network metrics**.
