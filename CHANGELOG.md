@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.0.0-beta.1] - 2026-10-25
+
 ### Added
 
 - **Automatic updates.** The app checks GitHub for new versions, downloads them in the background and installs them when you restart. Updates are signed and verified before they run.

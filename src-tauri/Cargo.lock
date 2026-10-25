@@ -916,7 +916,7 @@ dependencies = [
 
 [[package]]
 name = "dse-data-fetcher"
-version = "2.0.0-beta"
+version = "2.0.0-beta.1"
 dependencies = [
  "reqwest 0.12.28",
  "serde",
