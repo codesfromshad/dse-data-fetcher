@@ -10,6 +10,13 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-26
+
+### Fixed
+
+- Buttons, tabs, switches, checkboxes, dropdowns and list rows now show the normal arrow cursor, like the rest of Windows. The hand cursor is kept for links only.
+- Labels, headings and buttons can no longer be highlighted or dragged, and show the arrow instead of the text cursor, just like a native Windows app. Text can still be selected in text fields, the About details and the legal documents, and Ctrl+A no longer selects the whole window.
+
 ## [2.1.0] - 2026-10-26
 
 The first stable release of the DSE Data Fetcher desktop app. Everything from the 2.0 betas is now on the Stable channel: the Windows app, automatic updates, network metrics, the faster activity log and instant tab switching.
