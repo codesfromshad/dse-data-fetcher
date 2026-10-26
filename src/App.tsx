@@ -80,6 +80,8 @@ const useStyles = makeStyles({
     borderRadius: '50%',
     backgroundColor: tokens.colorBrandBackground,
   },
+  // Title on its own line, above the message.
+  barTitle: { display: 'block', marginBottom: tokens.spacingVerticalXXS },
   content: {
     flex: 1,
     minHeight: 0,
@@ -139,6 +141,22 @@ export default function App() {
       if (auto && summary.ready && (summary.hasApp || !open)) start({ openAfter: open && summary.hasApp });
     });
   }, [runCheck, start]);
+
+  // The fetch and the system check each look at the connection; keep them in
+  // step. A fetch that found no connection marks the check offline, and one
+  // that got past connecting clears an offline or DSE problem by re-checking.
+  const { reportOffline } = system;
+  const offlineRun = run.phase === 'failed' && run.error?.offline === true;
+  useEffect(() => {
+    if (offlineRun) reportOffline();
+  }, [offlineRun, reportOffline]);
+  const connected = run.phase === 'running' && run.progress.stage !== 'connecting';
+  const networkProblem = useRef(false);
+  networkProblem.current = system.checks.some((c) => (c.id === 'internet' || c.id === 'dse') && c.state === 'error');
+  useEffect(() => {
+    // Once per run, when it gets past connecting (not on every check result).
+    if (connected && networkProblem.current) void runCheck();
+  }, [connected, runCheck]);
 
   /** Pick a spreadsheet app, then carry on with whatever was waiting on it. */
   const chooseApp = useCallback(async () => {
@@ -238,10 +256,11 @@ export default function App() {
 
             {run.result && run.phase === 'done' && <ResultBar result={run.result} canOpen={hasApp} onChooseApp={chooseApp} />}
 
-            {run.error && run.phase === 'failed' && (
+            {/* Offline is already shown (once) by the system check above. */}
+            {run.error && run.phase === 'failed' && !run.error.offline && (
               <MessageBar intent="error" layout="multiline">
                 <MessageBarBody>
-                  <MessageBarTitle>{run.error.offline ? 'You’re offline' : 'Something went wrong'}</MessageBarTitle>
+                  <MessageBarTitle className={styles.barTitle}>Something went wrong</MessageBarTitle>
                   {run.error.message}
                 </MessageBarBody>
                 <MessageBarActions>

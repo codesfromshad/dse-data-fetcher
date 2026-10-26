@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { checkDse } from '../lib/fetch';
 import {
@@ -38,6 +38,9 @@ export interface CheckSummary {
   /** A spreadsheet app is available to open the result. */
   hasApp: boolean;
 }
+
+/** While offline, how often to look for the connection coming back. */
+const RECONNECT_POLL_MS = 5000;
 
 const INITIAL: Check[] = [
   { id: 'internet', label: 'Internet connection', state: 'pending', detail: '' },
@@ -152,12 +155,48 @@ export function useSystemCheck() {
     return applySpreadsheet(await setSpreadsheetApp(picked));
   }, [applySpreadsheet]);
 
+  /**
+   * The fetch found no connection (Rust checks before every run). Mark it
+   * here too, so Settings → System status and the Fetch page agree.
+   */
+  const reportOffline = useCallback(() => {
+    if (inFlight.current) return;
+    set('internet', problemCheck(offlineProblem()));
+    set('dse', { state: 'skipped', detail: 'Skipped: no internet connection.', problem: undefined });
+    setCheckedAt(new Date());
+  }, [set]);
+
+  // Follow the connection while the app is open: re-check as soon as Windows
+  // says it changed, and while offline, look for it coming back every few
+  // seconds (a cable unplugged upstream doesn't always fire an event).
+  const offline = checks.find((c) => c.id === 'internet')?.state === 'error';
+  useEffect(() => {
+    const onOnline = () => void run();
+    const onOffline = () => reportOffline();
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [run, reportOffline]);
+  useEffect(() => {
+    if (!offline) return;
+    const timer = setInterval(() => {
+      if (inFlight.current) return;
+      void checkOnline()
+        .catch(() => false)
+        .then((ok) => ok && void run());
+    }, RECONNECT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [offline, run]);
+
   const resetToSystemDefault = useCallback(
     async () => applySpreadsheet(await setSpreadsheetApp(null)),
     [applySpreadsheet],
   );
 
-  return { checks, running, checkedAt, spreadsheet, run, chooseApp, resetToSystemDefault };
+  return { checks, running, checkedAt, spreadsheet, run, reportOffline, chooseApp, resetToSystemDefault };
 }
 
 export type SystemCheck = ReturnType<typeof useSystemCheck>;

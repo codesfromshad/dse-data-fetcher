@@ -309,8 +309,8 @@ function RetriesRow({ act }: { act: Act }) {
       title="Retries per company"
       description={
         unlimited
-          ? 'Keeps fetching a page again until it loads with complete data. Cancel the fetch to stop.'
-          : 'How many times to fetch a page again when it fails or comes back with NaN or missing values. After that, the row is kept with blanks (or marked failed).'
+          ? 'Keeps trying a company page until it loads with every value. Cancel the fetch to stop.'
+          : 'How many times to try a company page again if it doesn’t load or has missing values. After that, the row is kept with blank cells, or marked as failed.'
       }
     >
       <SpinButton

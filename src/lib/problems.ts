@@ -32,7 +32,7 @@ const tidy = (text: string) => text.replace(/\s*\(os error \d+\)\s*$/i, '').repl
 export const offlineProblem = (): Problem => ({
   severity: 'error',
   title: 'You’re offline',
-  message: 'This PC isn’t connected to the internet. Check your Wi-Fi or network cable, then check again.',
+  message: 'This PC isn’t connected to the internet. Check your Wi-Fi or network cable. This goes away by itself once you’re back online.',
   fix: 'retry',
 });
 

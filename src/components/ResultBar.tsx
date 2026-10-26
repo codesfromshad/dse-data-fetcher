@@ -17,6 +17,8 @@ import type { FetchResult } from '../lib/fetch';
 
 const useStyles = makeStyles({
   name: { fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 },
+  // On its own line, so the title doesn't run into the file name.
+  title: { display: 'block', marginBottom: tokens.spacingVerticalXXS },
 });
 
 /** Suggested name for "Save a copy": drop the temp_ prefix. */
@@ -58,8 +60,9 @@ export function ResultBar({ result, canOpen, onChooseApp }: Props) {
     <>
       <MessageBar intent="success" layout="multiline" icon={<DocumentTableRegular />}>
         <MessageBarBody>
-          <MessageBarTitle>Spreadsheet ready</MessageBarTitle>
-          <span className={styles.name}>{result.fileName}</span> is temporary and will be deleted when you close the app.
+          <MessageBarTitle className={styles.title}>Spreadsheet ready</MessageBarTitle>
+          <span className={styles.name}>{result.fileName}</span> is temporary and will be deleted when you close the
+          app. Use “Save a copy” to keep it.
           {savedTo && (
             <>
               {' '}

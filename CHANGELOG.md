@@ -10,6 +10,17 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Fixed
+
+- The activity log no longer flickers when new lines come in. New lines were briefly drawn on top of each other before settling into place.
+- The connection status now stays in sync. If a fetch finds you're offline, the system status says so too (and the other way round). Turning Wi-Fi off or on updates it right away, and the **You're offline** message goes away by itself once you're back online, including after **Fetch again**.
+- Only one "You're offline" message is shown instead of two.
+
+### Changed
+
+- Redesigned the dialog that appears when you close the app while a spreadsheet is still open. It now refers to your spreadsheet application instead of guessing it's Excel.
+- Clearer wording for **Retries per company** in Settings, and tidier text in the **Spreadsheet ready** message.
+
 ## [2.0.0-beta.5] - 2026-10-26
 
 ### Changed
