@@ -23,7 +23,7 @@ DATA STORED ON YOUR COMPUTER
   - The fetched workbook, as a temporary file in your Windows temp folder. It is deleted when you close the app, unless it is still open in another program. Use "Save a copy" to keep it.
   - Microsoft Edge WebView2 keeps its own cache in %LOCALAPPDATA%\com.codesfromshad.dse-data-fetcher.
 
-Uninstalling the app removes the program files. You can remove your settings by deleting the folders above.
+Uninstalling the app removes the program files. To remove your data as well, tick "Delete the application data" in the uninstaller: it deletes the folders above and any temporary spreadsheets the app left in your temp folder. You can also delete them yourself, or remove the temporary spreadsheets at any time in Settings > Advanced.
 
 MICROSOFT EDGE WEBVIEW2
 

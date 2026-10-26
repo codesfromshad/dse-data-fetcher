@@ -26,6 +26,7 @@ it as the GitHub release notes and the in-app "What's new".
 - The author's name in the About page footer now links to their GitHub profile.
 - **About → System information** and the footer now show the build: the commit it was built from (linked on GitHub), whether it's a release or debug build, and when it was built. **Copy** includes them too.
 - Links and buttons that open in your browser now show an "open" icon, so you can tell them apart from ones that stay in the app.
+- Uninstalling with **Delete the application data** ticked now also removes any temporary spreadsheets the app left in your temp folder, along with your settings and the app's cache. The privacy notice explains the option.
 
 ### Fixed
 
