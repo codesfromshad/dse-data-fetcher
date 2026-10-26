@@ -28,6 +28,7 @@ import { RunCard } from './components/RunCard';
 import type { SettingsSection } from './components/SettingsView';
 import { CheckSummary, SystemCheckCard } from './components/SystemCheck';
 import { UpdateBanner } from './components/UpdateControls';
+import { StableChannelPrompt } from './components/StableChannelPrompt';
 import { WhatsNewDialog } from './components/WhatsNewDialog';
 import { useCloseGuard } from './hooks/useCloseGuard';
 import { useFetchRun } from './hooks/useFetchRun';
@@ -110,6 +111,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('fetch');
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [notice, setNotice] = useState<string | null>(null);
+  const [whatsNewDone, setWhatsNewDone] = useState(false);
   // Every page stays mounted and is hidden instead (see <Activity> below), so
   // switching tabs never rebuilds one. Settings and About join once their
   // code is in, rendered at idle priority while hidden.
@@ -155,22 +157,6 @@ export default function App() {
       if (auto && summary.ready && (summary.hasApp || !open)) start({ openAfter: open && summary.hasApp });
     });
   }, [runCheck, start]);
-
-  // The fetch and the system check each look at the connection; keep them in
-  // step. A fetch that found no connection marks the check offline, and one
-  // that got past connecting clears an offline or DSE problem by re-checking.
-  const { reportOffline } = system;
-  const offlineRun = run.phase === 'failed' && run.error?.offline === true;
-  useEffect(() => {
-    if (offlineRun) reportOffline();
-  }, [offlineRun, reportOffline]);
-  const connected = run.phase === 'running' && run.progress.stage !== 'connecting';
-  const networkProblem = useRef(false);
-  networkProblem.current = system.checks.some((c) => (c.id === 'internet' || c.id === 'dse') && c.state === 'error');
-  useEffect(() => {
-    // Once per run, when it gets past connecting (not on every check result).
-    if (connected && networkProblem.current) void runCheck();
-  }, [connected, runCheck]);
 
   /** Pick a spreadsheet app, then carry on with whatever was waiting on it. */
   const chooseApp = useCallback(async () => {
@@ -305,7 +291,9 @@ export default function App() {
       </main>
 
       <CloseDialog locked={close.locked} onRetry={close.retry} onCloseAnyway={close.closeAnyway} onStay={close.stay} />
-      <WhatsNewDialog />
+      {/* One launch prompt at a time: What's new first, then the channel prompt. */}
+      <WhatsNewDialog onDone={() => setWhatsNewDone(true)} />
+      <StableChannelPrompt ready={whatsNewDone} />
     </div>
   );
 }

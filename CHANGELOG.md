@@ -10,6 +10,18 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+The first stable release of the DSE Data Fetcher desktop app. Everything from the 2.0 betas is now on the Stable channel: the Windows app, automatic updates, network metrics, the faster activity log and instant tab switching.
+
+### Added
+
+- **Connection monitoring.** The app now keeps an eye on your internet connection and the DSE website the whole time it's open, not just when you press Check again. The activity log says when the internet connection is lost and when it's restored, and when the DSE website can't be reached and when it's back. The system status updates on its own too.
+- If you're on the **Beta** channel, the app asks once whether you'd like to switch to **Stable**. Tick **Don't show this again** to stay on Beta without being asked. You can change channel any time in Settings → Updates.
+
+### Changed
+
+- Checking whether you're online is more reliable. It now makes a real connection instead of a name lookup, which Windows can answer from memory for a while after the connection is gone.
+- The app's description no longer mentions Excel: it saves company data as a spreadsheet (.xlsx) that opens in any spreadsheet application.
+
 ## [2.0.0-beta.7] - 2026-10-26
 
 ### Fixed

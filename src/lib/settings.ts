@@ -26,6 +26,8 @@ export interface Settings extends Preferences {
   spreadsheetApp: string | null;
   lastUpdateCheck: number | null;
   lastSeenVersion: string | null;
+  /** "Don't show this again" on the switch-to-Stable prompt. */
+  hideStablePrompt: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showNetworkMetrics: true,
   lastUpdateCheck: null,
   lastSeenVersion: null,
+  hideStablePrompt: false,
 };
 
 export const preferencesOf = (s: Settings): Preferences => ({
@@ -57,6 +60,7 @@ export const getSettings = () => invoke<Settings>('get_settings');
 export const setPreferences = (preferences: Preferences) => invoke<Settings>('set_preferences', { preferences });
 export const markUpdateChecked = (at: number) => invoke<Settings>('mark_update_checked', { at });
 export const setLastSeenVersion = (version: string) => invoke<Settings>('set_last_seen_version', { version });
+export const setHideStablePrompt = (hide: boolean) => invoke<Settings>('set_hide_stable_prompt', { hide });
 export const resetSettings = () => invoke<Settings>('reset_settings');
 export const openSettingsFolder = () => invoke<void>('open_settings_folder');
 

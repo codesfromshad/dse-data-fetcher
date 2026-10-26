@@ -82,6 +82,3 @@ export function startFetch(openAfter: boolean, onEvent: (event: FetchEvent) => v
 
 /** Stop the running fetch; `startFetch` then rejects with kind "cancelled". */
 export const cancelFetch = () => invoke<void>('cancel_fetch');
-
-/** Startup check: resolves to the round trip in ms, rejects if DSE is unreachable. */
-export const checkDse = () => invoke<number>('check_dse');

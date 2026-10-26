@@ -18,12 +18,12 @@ use std::{
 
 use chrono::Local;
 use serde::Serialize;
-use tauri::{ipc::Channel, AppHandle, State};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 use tokio_util::sync::CancellationToken;
 
 use crate::AppState;
 use dse::DSE_URL;
-use http::{describe_error, HttpError};
+use http::describe_error;
 use log::{hl, hl_as, parts, Level, Part, Tone};
 use metrics::{Meter, Metrics, Snapshot, SAMPLE_INTERVAL};
 use pipeline::{Counts, Options, RunError, Sink, Stage};
@@ -123,12 +123,20 @@ impl<O: Outbox> ChannelSink<O> {
     }
 }
 
+impl LogLine {
+    /// A line stamped with the current local time.
+    pub fn now(level: Level, parts: Vec<Part>) -> Self {
+        let (time, short_time) = time::log_stamps(Local::now());
+        Self { level, parts, time, short_time }
+    }
+}
+
 impl<O: Outbox> Sink for ChannelSink<O> {
     fn log(&self, level: Level, parts: Vec<Part>) {
-        let (time, short_time) = time::log_stamps(Local::now());
+        let line = LogLine::now(level, parts);
         // Sent under the lock so lines from concurrent requests stay in order.
         let mut pending = self.pending.lock().unwrap();
-        pending.lines.push(LogLine { level, parts, time, short_time });
+        pending.lines.push(line);
         let since = *pending.since.get_or_insert_with(Instant::now);
         if pending.lines.len() >= LOG_BATCH_MAX || since.elapsed() >= LOG_FLUSH_INTERVAL {
             self.send_pending(&mut pending);
@@ -237,14 +245,6 @@ pub fn cancel_fetch(fetch: State<'_, FetchState>) {
     }
 }
 
-/// Startup check: is the DSE site reachable? Returns the round trip in ms.
-#[tauri::command]
-pub async fn check_dse() -> Result<u64, HttpError> {
-    let started = Instant::now();
-    http::get_once(&http::new_client(), DSE_URL, &[], Duration::from_secs(10), &Metrics::default()).await?;
-    Ok(started.elapsed().as_millis() as u64)
-}
-
 async fn run(
     app: &AppHandle,
     state: &AppState,
@@ -254,7 +254,10 @@ async fn run(
 ) -> Result<FetchResult, Failure> {
     let started = Instant::now();
     sink.progress(Stage::Connecting, "Checking internet connection...".into(), Counts::default());
-    if !http::check_online().await {
+    // The same check the connection monitor runs, so a run that finds no
+    // connection also updates the status everywhere else (and vice versa).
+    let connectivity = app.state::<crate::connectivity::Connectivity>();
+    if connectivity.probe(app, false).await.internet != Some(true) {
         return Err(Failure::Offline);
     }
     if cancel.is_cancelled() {

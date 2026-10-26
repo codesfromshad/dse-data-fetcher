@@ -49,7 +49,7 @@ export function ResultBar({ result, canOpen, onChooseApp }: Props) {
     const destination = await save({
       title: 'Save a copy of the spreadsheet',
       defaultPath: suggestedName(result.fileName),
-      filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
+      filters: [{ name: 'Spreadsheet (.xlsx)', extensions: ['xlsx'] }],
     });
     if (!destination) return;
     await saveCopy(result.filePath, destination);

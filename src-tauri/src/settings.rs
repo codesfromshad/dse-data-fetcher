@@ -89,6 +89,8 @@ pub struct Settings {
     pub last_update_check: Option<u64>,
     /// The version whose "What's new" the user has already seen.
     pub last_seen_version: Option<String>,
+    /// "Don't show this again" on the switch-to-Stable prompt.
+    pub hide_stable_prompt: bool,
 }
 
 pub fn settings_path(app: &AppHandle) -> Option<PathBuf> {
@@ -124,6 +126,7 @@ mod tests {
         assert!(s.preferences.update_channel.is_none());
         assert_eq!(s.preferences.fetch_retries, Some(DEFAULT_FETCH_RETRIES));
         assert!(s.preferences.show_network_metrics);
+        assert!(!s.hide_stable_prompt);
     }
 
     #[test]

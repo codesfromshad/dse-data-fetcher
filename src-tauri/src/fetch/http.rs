@@ -25,7 +25,7 @@ const DEFAULT_HEADERS: [(&str, &str); 5] = [
 
 pub type Headers = [(&'static str, &'static str)];
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HttpError {
     /// "connect" | "timeout" | "status" | "body" | "other"
@@ -221,11 +221,6 @@ pub fn describe_error(error: &dyn fmt::Display) -> String {
     } else {
         line
     }
-}
-
-/// Same check the CLI did: can we resolve www.google.com?
-pub async fn check_online() -> bool {
-    tokio::net::lookup_host(("www.google.com", 443)).await.is_ok()
 }
 
 #[cfg(test)]

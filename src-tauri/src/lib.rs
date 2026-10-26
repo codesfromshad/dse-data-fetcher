@@ -3,7 +3,8 @@
 //! Everything except drawing the UI happens here:
 //!   * the whole fetch run (see fetch/): HTTP with a cookie jar per run,
 //!     company-page parsing, retries, the xlsx, progress/log events
-//!   * a DNS check for "are we online at all", and a DSE reachability check
+//!   * a connection monitor: internet and DSE, checked for as long as the
+//!     app runs, with changes pushed to the window (see connectivity.rs)
 //!   * temp-file bookkeeping: open the xlsx, save a copy, delete it, and a
 //!     last-chance cleanup when the app exits.
 //!   * the startup system check: temp folder, spreadsheet app (with a
@@ -11,6 +12,7 @@
 //!   * settings, app/build info for the About page, and self-update from
 //!     GitHub Releases (see updater.rs).
 
+mod connectivity;
 mod fetch;
 mod settings;
 mod spreadsheet;
@@ -38,12 +40,6 @@ struct AppState {
     /// Files the UI may open/reveal: temp files plus copies the user saved.
     known_files: Mutex<HashSet<PathBuf>>,
     settings: Mutex<Settings>,
-}
-
-/// Same check the CLI did: can we resolve www.google.com?
-#[tauri::command]
-async fn check_online() -> bool {
-    fetch::http::check_online().await
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +258,12 @@ fn set_last_seen_version(app: AppHandle, state: State<'_, AppState>, version: St
     modify_settings(&app, &state, |s| s.last_seen_version = Some(version))
 }
 
+/// "Don't show this again" on the switch-to-Stable prompt.
+#[tauri::command]
+fn set_hide_stable_prompt(app: AppHandle, state: State<'_, AppState>, hide: bool) -> Result<Settings, String> {
+    modify_settings(&app, &state, |s| s.hide_stable_prompt = hide)
+}
+
 /// Back to defaults. Keeps the bookkeeping so "What's new" doesn't pop up again.
 #[tauri::command]
 fn reset_settings(app: AppHandle, state: State<'_, AppState>) -> Result<Settings, String> {
@@ -269,6 +271,7 @@ fn reset_settings(app: AppHandle, state: State<'_, AppState>) -> Result<Settings
         *s = Settings {
             last_update_check: s.last_update_check,
             last_seen_version: s.last_seen_version.clone(),
+            hide_stable_prompt: s.hide_stable_prompt,
             ..Settings::default()
         }
     })?;
@@ -369,6 +372,8 @@ pub fn run() {
             });
             app.manage(updater::UpdaterState::default());
             app.manage(fetch::FetchState::default());
+            app.manage(connectivity::Connectivity::default());
+            connectivity::start_monitor(app.handle().clone());
 
             if let Some(window) = app.get_webview_window("main") {
                 apply_theme(&window, theme);
@@ -394,8 +399,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fetch::start_fetch,
             fetch::cancel_fetch,
-            fetch::check_dse,
-            check_online,
+            connectivity::probe_connectivity,
             delete_temp_files,
             open_file,
             reveal_file,
@@ -407,6 +411,7 @@ pub fn run() {
             set_preferences,
             mark_update_checked,
             set_last_seen_version,
+            set_hide_stable_prompt,
             reset_settings,
             open_settings_folder,
             build_info,

@@ -1,8 +1,8 @@
 # DSE Data Fetcher
 
 Desktop app (Tauri 2 + React + Fluent UI) that fetches company data from the
-old Dhaka Stock Exchange website into an Excel workbook. Updates itself from
-GitHub Releases.
+old Dhaka Stock Exchange website and saves it as a spreadsheet (.xlsx).
+Updates itself from GitHub Releases.
 
 ## Prerequisites (Windows)
 

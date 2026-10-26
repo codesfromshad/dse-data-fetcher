@@ -22,7 +22,7 @@ export function displayVersion(version: string) {
 export const BRAND_NAME = 'EDGE Finance Systems';
 
 export const SUMMARY =
-  'Fetches company data from the old Dhaka Stock Exchange website and saves it as an Excel workbook.';
+  'Fetches company data from the old Dhaka Stock Exchange website and saves it as a spreadsheet (.xlsx).';
 
 export const DATA_POINTS = [
   'Scrip code and trading code',

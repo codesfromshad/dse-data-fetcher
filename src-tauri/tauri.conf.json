@@ -33,7 +33,7 @@
     "copyright": "Copyright © 2026 Shadman Rafid Chowdhury (codesfromshad). All rights reserved.",
     "category": "Finance",
     "shortDescription": "DSE Data Fetcher",
-    "longDescription": "Fetches company data from the Dhaka Stock Exchange website into an Excel workbook.",
+    "longDescription": "Fetches company data from the old Dhaka Stock Exchange website and saves it as a spreadsheet (.xlsx).",
     "homepage": "https://github.com/codesfromshad/dse-data-fetcher",
     "licenseFile": "../legal/build/LICENSE.txt",
     "resources": {

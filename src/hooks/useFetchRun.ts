@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import { onConnectivity } from '../lib/connectivity';
 import { describeError } from '../lib/errors';
 import {
   cancelFetch,
@@ -92,6 +93,18 @@ export function useFetchRun() {
       if (timer.current !== null) clearTimeout(timer.current);
     },
     [],
+  );
+
+  // "Internet connection lost/restored", "DSE can't be reached"...: written
+  // by the connection monitor (Rust), whether or not a fetch is running.
+  useEffect(
+    () =>
+      onConnectivity(({ lines }) => {
+        if (!lines.length) return;
+        for (const line of lines) pendingLogs.current.push({ id: nextId.current++, ...line });
+        schedule();
+      }),
+    [schedule],
   );
 
   /** A line from this side (run separators, IPC trouble). Rust's lines arrive formatted. */

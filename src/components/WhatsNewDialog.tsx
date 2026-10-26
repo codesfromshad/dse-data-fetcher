@@ -24,9 +24,10 @@ const useStyles = makeStyles({
 
 /**
  * Shown once after the app updates to a new version. A fresh install just
- * records the version silently.
+ * records the version silently. `onDone` fires once it's closed (or right
+ * away when there's nothing to show), so other launch prompts can wait.
  */
-export function WhatsNewDialog() {
+export function WhatsNewDialog({ onDone }: { onDone?: () => void }) {
   const styles = useStyles();
   const { settings, replace } = useSettings();
   const [open, setOpen] = useState(false);
@@ -34,15 +35,21 @@ export function WhatsNewDialog() {
 
   useEffect(() => {
     const seen = settings.lastSeenVersion;
+    if (seen && seen !== APP_VERSION && release) setOpen(true);
+    else onDone?.();
     if (seen === APP_VERSION) return;
-    if (seen && release) setOpen(true);
     void setLastSeenVersion(APP_VERSION).then(replace).catch(() => {});
     // Only once, on launch.
   }, []);
 
+  const close = () => {
+    setOpen(false);
+    onDone?.();
+  };
+
   if (!release) return null;
   return (
-    <Dialog open={open} onOpenChange={(_, d) => setOpen(d.open)}>
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && close()}>
       <DialogSurface className={styles.surface}>
         <DialogBody>
           <DialogTitle>What’s new in {displayVersion(APP_VERSION)}</DialogTitle>
@@ -51,7 +58,7 @@ export function WhatsNewDialog() {
           </DialogContent>
           <DialogActions>
             <ChangelogDialog trigger={<Button appearance="subtle">All release notes</Button>} />
-            <Button appearance="primary" onClick={() => setOpen(false)}>
+            <Button appearance="primary" onClick={close}>
               Got it
             </Button>
           </DialogActions>

@@ -1,9 +1,8 @@
 // Typed wrappers around the Rust commands in src-tauri/src/lib.rs.
 import { invoke } from '@tauri-apps/api/core';
 
-// (The fetch commands have their own wrappers in fetch.ts.)
-
-export const checkOnline = () => invoke<boolean>('check_online');
+// (The fetch commands have their own wrappers in fetch.ts, the connection
+// monitor in connectivity.ts.)
 
 export interface LockedFile {
   path: string;

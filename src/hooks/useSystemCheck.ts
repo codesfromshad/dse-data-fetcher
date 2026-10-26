@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { checkDse } from '../lib/fetch';
+import { onConnectivity, probeConnectivity, type ConnectivityStatus } from '../lib/connectivity';
 import {
-  checkOnline,
   checkTempDir,
   effectiveApp,
   getSpreadsheetStatus,
@@ -39,9 +38,6 @@ export interface CheckSummary {
   hasApp: boolean;
 }
 
-/** While offline, how often to look for the connection coming back. */
-const RECONNECT_POLL_MS = 5000;
-
 const INITIAL: Check[] = [
   { id: 'internet', label: 'Internet connection', state: 'pending', detail: '' },
   { id: 'dse', label: 'DSE website', state: 'pending', detail: '' },
@@ -61,6 +57,20 @@ function spreadsheetCheck(s: SpreadsheetStatus): Partial<Check> {
 }
 
 const problemCheck = (problem: Problem): Partial<Check> => ({ state: problem.severity, detail: problem.title, problem });
+
+/** The connection monitor's status as the internet and DSE rows. */
+function connectivityChecks(s: ConnectivityStatus): { internet: Partial<Check>; dse: Partial<Check> } {
+  if (s.internet === false) {
+    return {
+      internet: problemCheck(offlineProblem()),
+      dse: { state: 'skipped', detail: 'Skipped: no internet connection.', problem: undefined },
+    };
+  }
+  const internet: Partial<Check> = { state: 'ok', detail: 'Connected', problem: undefined };
+  if (s.dse === true) return { internet, dse: { state: 'ok', detail: `Reachable · ${s.dseMs ?? 0} ms`, problem: undefined } };
+  if (s.dse === false) return { internet, dse: problemCheck(dseProblem(s.dseError ?? { kind: 'other', message: 'No answer' })) };
+  return { internet, dse: { state: 'running', detail: 'Checking…', problem: undefined } };
+}
 
 /** The checks that didn't pass, errors first. */
 export const problemsOf = (checks: Check[]) =>
@@ -94,27 +104,18 @@ export function useSystemCheck() {
     setRunning(true);
     setChecks(INITIAL.map((c) => ({ ...c, state: 'running', detail: 'Checking…', problem: undefined })));
 
-    const internet = checkOnline()
-      .catch(() => false)
-      .then((ok) => {
-        set('internet', ok ? { state: 'ok', detail: 'Connected' } : problemCheck(offlineProblem()));
-        return ok;
+    // Internet and DSE come from the connection monitor (Rust), the same
+    // status the fetch and the activity log use.
+    const network = probeConnectivity()
+      .catch((): ConnectivityStatus => ({ internet: false, dse: null, dseMs: null, dseError: null }))
+      .then((status) => {
+        const rows = connectivityChecks(status);
+        set('internet', rows.internet);
+        set('dse', rows.dse);
+        return status;
       });
-
-    const dse = internet.then(async (online) => {
-      if (!online) {
-        set('dse', { state: 'skipped', detail: 'Skipped: no internet connection.' });
-        return false;
-      }
-      try {
-        const ms = await checkDse();
-        set('dse', { state: 'ok', detail: `Reachable · ${ms} ms` });
-        return true;
-      } catch (error) {
-        set('dse', problemCheck(dseProblem(error)));
-        return false;
-      }
-    });
+    const internet = network.then((s) => s.internet === true);
+    const dse = network.then((s) => s.dse === true);
 
     const temp = checkTempDir()
       .then((dir) => {
@@ -155,48 +156,33 @@ export function useSystemCheck() {
     return applySpreadsheet(await setSpreadsheetApp(picked));
   }, [applySpreadsheet]);
 
-  /**
-   * The fetch found no connection (Rust checks before every run). Mark it
-   * here too, so Settings → System status and the Fetch page agree.
-   */
-  const reportOffline = useCallback(() => {
-    if (inFlight.current) return;
-    set('internet', problemCheck(offlineProblem()));
-    set('dse', { state: 'skipped', detail: 'Skipped: no internet connection.', problem: undefined });
-    setCheckedAt(new Date());
-  }, [set]);
-
-  // Follow the connection while the app is open: re-check as soon as Windows
-  // says it changed, and while offline, look for it coming back every few
-  // seconds (a cable unplugged upstream doesn't always fire an event).
-  const offline = checks.find((c) => c.id === 'internet')?.state === 'error';
+  // Keep the internet and DSE rows live: the monitor pushes every change.
+  // When Windows says the network changed, check at once instead of waiting
+  // for the monitor's next tick.
   useEffect(() => {
-    const onOnline = () => void run();
-    const onOffline = () => reportOffline();
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
+    const stop = onConnectivity((status) => {
+      if (inFlight.current) return; // the running check will set them
+      const rows = connectivityChecks(status);
+      set('internet', rows.internet);
+      set('dse', rows.dse);
+      setCheckedAt(new Date());
+    });
+    const recheck = () => void probeConnectivity().catch(() => {});
+    window.addEventListener('online', recheck);
+    window.addEventListener('offline', recheck);
     return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
+      stop();
+      window.removeEventListener('online', recheck);
+      window.removeEventListener('offline', recheck);
     };
-  }, [run, reportOffline]);
-  useEffect(() => {
-    if (!offline) return;
-    const timer = setInterval(() => {
-      if (inFlight.current) return;
-      void checkOnline()
-        .catch(() => false)
-        .then((ok) => ok && void run());
-    }, RECONNECT_POLL_MS);
-    return () => clearInterval(timer);
-  }, [offline, run]);
+  }, [set]);
 
   const resetToSystemDefault = useCallback(
     async () => applySpreadsheet(await setSpreadsheetApp(null)),
     [applySpreadsheet],
   );
 
-  return { checks, running, checkedAt, spreadsheet, run, reportOffline, chooseApp, resetToSystemDefault };
+  return { checks, running, checkedAt, spreadsheet, run, chooseApp, resetToSystemDefault };
 }
 
 export type SystemCheck = ReturnType<typeof useSystemCheck>;
