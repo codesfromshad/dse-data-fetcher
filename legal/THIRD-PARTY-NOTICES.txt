@@ -9,6 +9,7 @@ COMPONENTS
   - React and React DOM - MIT - https://react.dev
   - Fluent UI React v9 - MIT - https://github.com/microsoft/fluentui
   - Fluent UI System Icons - MIT - https://github.com/microsoft/fluentui-system-icons
+  - Simple Icons (the GitHub icon) - CC0-1.0 - https://simpleicons.org. GitHub and the GitHub logo are trademarks of GitHub, Inc.
   - reqwest - MIT or Apache-2.0 - https://github.com/seanmonstar/reqwest
   - Tokio and tokio-util - MIT - https://tokio.rs
   - futures-util - MIT or Apache-2.0 - https://github.com/rust-lang/futures-rs

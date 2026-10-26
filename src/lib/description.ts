@@ -45,6 +45,8 @@ export const GITHUB_REPO = 'codesfromshad/dse-data-fetcher';
 
 export const LINKS = {
   website: 'https://codesfromshad.com',
+  /** The author's GitHub profile. */
+  github: `https://github.com/${AUTHOR.handle}`,
   repository: `https://github.com/${GITHUB_REPO}`,
   releases: `https://github.com/${GITHUB_REPO}/releases`,
   issues: `https://github.com/${GITHUB_REPO}/issues/new`,

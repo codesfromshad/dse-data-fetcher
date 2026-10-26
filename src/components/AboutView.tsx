@@ -19,13 +19,16 @@ import {
   CodeRegular,
   CopyRegular,
   GlobeRegular,
+  HeartFilled,
   LockClosedRegular,
   MailRegular,
+  OpenRegular,
   ScalesRegular,
   ShieldRegular,
   WarningRegular,
   type FluentIcon,
 } from '@fluentui/react-icons';
+import { siGithub } from 'simple-icons';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import icon from '../assets/icon.png';
 import { useSettings } from '../hooks/useSettings';
@@ -36,7 +39,6 @@ import {
   APP_NAME,
   APP_VERSION,
   AUTHOR,
-  COPYRIGHT_LINE,
   DATA_POINTS,
   displayVersion,
   IS_PRERELEASE,
@@ -130,6 +132,11 @@ const useStyles = makeStyles({
   chevron: { color: tokens.colorNeutralForeground3 },
   // Links in the footer: the footer's own (caption) size, not Link's default.
   footerLink: { fontSize: 'inherit', lineHeight: 'inherit' },
+  // A gap rather than a space, so the underline starts at the handle.
+  footerIcon: { verticalAlign: 'middle', marginRight: '3px' },
+  // "Opens in the browser", after the GitHub handle (as on log symbols).
+  footerOpen: { verticalAlign: '-1px', marginLeft: '2px', fontSize: '11px' },
+  heart: { verticalAlign: 'middle', color: tokens.colorPaletteRedForeground1 },
   footer: { textAlign: 'center', color: tokens.colorNeutralForeground3, padding: `${tokens.spacingVerticalS} 0` },
 });
 
@@ -141,6 +148,15 @@ const LEGAL_ICONS: Record<LegalDocId, FluentIcon> = {
   privacy: LockClosedRegular,
   'third-party': CodeRegular,
 };
+
+/** GitHub's mark (from Simple Icons), in the current text colour, 1em square. */
+function GitHubIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" aria-hidden className={className}>
+      <path d={siGithub.path} />
+    </svg>
+  );
+}
 
 /** The legal documents, as short links in the footer (same icons as the Legal card). */
 const FOOTER_LINKS: { id: LegalDocId; label: string }[] = [
@@ -312,8 +328,19 @@ export function AboutView() {
           <Caption1 block>
             <ShieldRegular style={{ verticalAlign: 'middle' }} /> No telemetry. Your data stays on this PC.
           </Caption1>
-          <Caption1 block>{COPYRIGHT_LINE}</Caption1>
-          <Caption1 block>Made with ❤️ in Dhaka, Bangladesh for EDGE Asset Management by {AUTHOR.name}</Caption1>
+          <Caption1 block>
+            © 2026 {AUTHOR.name} (
+            <Link inline className={styles.footerLink} title={LINKS.github} onClick={open(LINKS.github)}>
+              <GitHubIcon className={styles.footerIcon} />
+              {AUTHOR.handle}
+              <OpenRegular className={styles.footerOpen} aria-hidden />
+            </Link>
+            ). All rights reserved.
+          </Caption1>
+          <Caption1 block>
+            Made with <HeartFilled className={styles.heart} aria-label="love" /> in Dhaka, Bangladesh for EDGE Asset
+            Management by {AUTHOR.name}
+          </Caption1>
           <Caption1 block>
             {FOOTER_LINKS.map(({ id, label }, i) => {
               const doc = LEGAL_DOCS.find((d) => d.id === id);

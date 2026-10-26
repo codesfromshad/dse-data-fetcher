@@ -23,6 +23,7 @@ it as the GitHub release notes and the in-app "What's new".
 
 - The fetch buttons now read **Start fetching** and **Stop fetching** (was Start fetch and Cancel).
 - The About page footer now links to all the legal documents on a line of their own: **License**, **Disclaimer**, **Privacy** and **Open-source**.
+- The author's name in the About page footer now links to their GitHub profile.
 
 ### Fixed
 
