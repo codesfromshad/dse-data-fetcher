@@ -59,6 +59,10 @@ pub struct Preferences {
     /// Show data transferred/processed and the transfer rate while fetching
     /// (progress card and log).
     pub show_network_metrics: bool,
+    /// Delete this session's temporary spreadsheets when the app closes (and
+    /// before an update installs). Off: they stay in the temp folder, for
+    /// Settings → Advanced to clean up later.
+    pub delete_temp_on_close: bool,
 }
 
 pub const DEFAULT_FETCH_RETRIES: u32 = 5;
@@ -74,6 +78,7 @@ impl Default for Preferences {
             update_channel: None,
             fetch_retries: Some(DEFAULT_FETCH_RETRIES),
             show_network_metrics: true,
+            delete_temp_on_close: true,
         }
     }
 }
@@ -127,6 +132,7 @@ mod tests {
         assert_eq!(s.preferences.fetch_retries, Some(DEFAULT_FETCH_RETRIES));
         assert!(s.preferences.show_network_metrics);
         assert!(!s.hide_stable_prompt);
+        assert!(s.preferences.delete_temp_on_close, "files from before the setting keep deleting");
     }
 
     #[test]

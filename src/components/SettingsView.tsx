@@ -36,6 +36,7 @@ import {
   DarkThemeRegular,
   DataTrendingRegular,
   DataUsageRegular,
+  DeleteRegular,
   DocumentTableRegular,
   DocumentTextRegular,
   FolderOpenRegular,
@@ -314,6 +315,25 @@ function FetchingSection({ system, act }: { system: SystemCheck; act: Act }) {
           <Button appearance="primary" icon={<FolderOpenRegular />} onClick={act(system.chooseApp)}>
             Choose…
           </Button>
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup title="When you close the app">
+        <SettingRow
+          icon={<DeleteRegular />}
+          title="Delete temporary spreadsheets"
+          description={
+            settings.deleteTempOnClose
+              ? 'Deletes the spreadsheets this session saved in your temp folder. Use “Save a copy” to keep one.'
+              : 'Keeps them in your temp folder when you close the app (and when an update installs). Delete old ones any time in Advanced.'
+          }
+        >
+          <Switch
+            checked={settings.deleteTempOnClose}
+            onChange={(_, d) => void act(() => update({ deleteTempOnClose: d.checked }))()}
+            label={settings.deleteTempOnClose ? 'On' : 'Off'}
+            labelPosition="before"
+          />
         </SettingRow>
       </SettingsGroup>
     </>

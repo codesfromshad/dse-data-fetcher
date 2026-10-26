@@ -355,13 +355,23 @@ async fn run(
     let path = crate::write_temp_file(state, &file_name, &bytes).map_err(Failure::Failed)?;
     let file_path = path.to_string_lossy().into_owned();
     sink.log(Level::Success, parts!["Created ", hl(&file_name), " with the fetched stock data."]);
-    sink.log(
-        Level::Info,
-        parts![
-            hl(&file_name),
-            " is a temporary file and WILL BE DELETED when you close this app. Use “Save a copy” to keep it."
-        ],
-    );
+    if state.settings.lock().unwrap().preferences.delete_temp_on_close {
+        sink.log(
+            Level::Info,
+            parts![
+                hl(&file_name),
+                " is a temporary file and WILL BE DELETED when you close this app. Use “Save a copy” to keep it."
+            ],
+        );
+    } else {
+        sink.log(
+            Level::Info,
+            parts![
+                hl(&file_name),
+                " is saved in your temp folder and is kept when you close this app. Clean up old ones in Settings → Advanced."
+            ],
+        );
+    }
 
     let mut result = FetchResult {
         file_name,

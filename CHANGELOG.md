@@ -18,6 +18,7 @@ it as the GitHub release notes and the in-app "What's new".
 - Company symbols in the activity log are now links: click one to open that company's page on the DSE website.
 - The activity log now says when the temporary spreadsheet is deleted, or why it couldn't be (for example, because it's still open in another app). When you close the app, it shows the log for a moment while it deletes the spreadsheet, then closes.
 - **Clean up temporary spreadsheets** in Settings → Advanced. Finds every spreadsheet this app has left in your temp folder, including ones from earlier sessions, with their sizes and dates, and deletes them all in one go.
+- **Keep or delete spreadsheets when you close the app**, in Settings → Fetching → When you close the app. On (the default) deletes this session's temporary spreadsheets as before; off keeps them in your temp folder, including when an update installs.
 
 ### Changed
 

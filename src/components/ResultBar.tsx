@@ -14,6 +14,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { describeError } from '../lib/errors';
 import { openFile, revealFile, saveCopy } from '../lib/native';
 import type { FetchResult } from '../lib/fetch';
+import { useSettings } from '../hooks/useSettings';
 
 const useStyles = makeStyles({
   name: { fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 },
@@ -33,6 +34,7 @@ interface Props {
 
 export function ResultBar({ result, canOpen, onChooseApp }: Props) {
   const styles = useStyles();
+  const { settings } = useSettings();
   const [savedTo, setSavedTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,8 +63,17 @@ export function ResultBar({ result, canOpen, onChooseApp }: Props) {
       <MessageBar intent="success" layout="multiline" icon={<DocumentTableRegular />}>
         <MessageBarBody>
           <MessageBarTitle className={styles.title}>Spreadsheet ready</MessageBarTitle>
-          <span className={styles.name}>{result.fileName}</span> is temporary and will be deleted when you close the
-          app. Use “Save a copy” to keep it.
+          {settings.deleteTempOnClose ? (
+            <>
+              <span className={styles.name}>{result.fileName}</span> is temporary and will be deleted when you close the
+              app. Use “Save a copy” to keep it.
+            </>
+          ) : (
+            <>
+              <span className={styles.name}>{result.fileName}</span> is in your temp folder and is kept when you close the
+              app. Use “Save a copy” to put it somewhere else.
+            </>
+          )}
           {savedTo && (
             <>
               {' '}

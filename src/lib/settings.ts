@@ -17,6 +17,8 @@ export interface Preferences {
   fetchRetries: number | null;
   /** Data transferred/processed and transfer rate while fetching. */
   showNetworkMetrics: boolean;
+  /** Delete this session's temporary spreadsheets when the app closes (and before an update installs). */
+  deleteTempOnClose: boolean;
 }
 
 export const DEFAULT_FETCH_RETRIES = 5;
@@ -40,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   updateChannel: null,
   fetchRetries: DEFAULT_FETCH_RETRIES,
   showNetworkMetrics: true,
+  deleteTempOnClose: true,
   lastUpdateCheck: null,
   lastSeenVersion: null,
   hideStablePrompt: false,
@@ -54,6 +57,7 @@ export const preferencesOf = (s: Settings): Preferences => ({
   updateChannel: s.updateChannel,
   fetchRetries: s.fetchRetries,
   showNetworkMetrics: s.showNetworkMetrics,
+  deleteTempOnClose: s.deleteTempOnClose,
 });
 
 export const getSettings = () => invoke<Settings>('get_settings');

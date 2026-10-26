@@ -36,6 +36,8 @@ const RECHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export function UpdaterProvider({ children }: { children: ReactNode }) {
   const { settings, channel, replace } = useSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const [status, setStatus] = useState<UpdateStatus>({ kind: 'idle' });
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const statusRef = useRef(status);
@@ -86,7 +88,9 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
   const install = useCallback(async (force = false) => {
     const current = statusRef.current;
     if (current.kind !== 'ready') return [];
-    if (!force) {
+    // Installing closes the app: delete the temp spreadsheets first, unless
+    // Settings says to keep them (Rust checks the same setting).
+    if (!force && settingsRef.current.deleteTempOnClose) {
       const locked = await deleteTempFiles()
         .then((report) => report.locked)
         .catch(() => []);

@@ -305,6 +305,10 @@ fn clean_temp_spreadsheets(app: AppHandle, state: State<'_, AppState>) -> Cleanu
 /// installs). Files still open in Excel are left behind.
 pub(crate) fn delete_all_temp_files<R: Runtime>(app: &AppHandle<R>) {
     if let Some(state) = app.try_state::<AppState>() {
+        // "Delete temporary spreadsheets" off in Settings: keep them.
+        if !state.settings.lock().unwrap().preferences.delete_temp_on_close {
+            return;
+        }
         for path in state.temp_files.lock().unwrap().drain() {
             let _ = std::fs::remove_file(path);
         }

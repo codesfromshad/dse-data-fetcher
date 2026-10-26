@@ -106,10 +106,10 @@ type Page = 'fetch' | 'settings' | 'about';
 export default function App() {
   const styles = useStyles();
   const run = useFetchRun();
-  // Closing shows the activity log while the temp spreadsheets are deleted.
-  const close = useCloseGuard({ onCleanup: () => setPage('fetch') });
   const system = useSystemCheck();
   const { settings } = useSettings();
+  // Closing shows the activity log while the temp spreadsheets are deleted.
+  const close = useCloseGuard({ onCleanup: () => setPage('fetch'), deleteOnClose: settings.deleteTempOnClose });
   const updater = useUpdater();
   const [page, setPage] = useState<Page>('fetch');
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');

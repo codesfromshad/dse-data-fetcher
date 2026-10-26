@@ -6,16 +6,20 @@ import { deleteTempFiles, type LockedFile } from '../lib/native';
 const LINGER_MS = 1200;
 
 /**
- * On window close, delete the temp spreadsheets, logging each one. If one is
+ * On window close, delete the temp spreadsheets (unless Settings says to keep
+ * them), logging each one. If one is
  * still open in Excel (locked), keep the window open and let the user retry
  * or leave it. If any were deleted, `onCleanup` runs (App shows the activity
  * log) and the window stays a moment so the lines can be read, then closes.
  */
-export function useCloseGuard({ onCleanup }: { onCleanup?: () => void } = {}) {
+export function useCloseGuard({ onCleanup, deleteOnClose = true }: { onCleanup?: () => void; deleteOnClose?: boolean } = {}) {
   const [locked, setLocked] = useState<LockedFile[]>([]);
   const force = useRef(false);
   const cleanup = useRef(onCleanup);
   cleanup.current = onCleanup;
+  // Settings → "Delete temporary spreadsheets"; read when the window closes.
+  const deleting = useRef(deleteOnClose);
+  deleting.current = deleteOnClose;
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -23,7 +27,7 @@ export function useCloseGuard({ onCleanup }: { onCleanup?: () => void } = {}) {
 
     getCurrentWindow()
       .onCloseRequested(async (event) => {
-        if (force.current) return;
+        if (force.current || !deleting.current) return; // keeping them: just close
         try {
           const report = await deleteTempFiles();
           if (report.locked.length) {
