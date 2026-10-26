@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-26
+
 ### Changed
 
 - Scrollbars now look and behave like Windows 11's. A thin line shows where you are in the page and stays visible whenever there's more to scroll. Point at it and it grows into a full scrollbar with arrows that you can drag, click or hold; it shrinks back shortly after the pointer moves away. This applies to Settings, About, the activity log and the dialogs.
