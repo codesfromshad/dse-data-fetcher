@@ -10,6 +10,17 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Fixed
+
+- Scrolling the mouse wheel with the pointer on a scrollbar now scrolls exactly like scrolling over the page. Before, it barely moved the activity log.
+- Scrolling the activity log while a fetch is running is smooth again instead of laggy and unresponsive.
+- The scrollbar thumb no longer brightens while you drag it, matching Windows.
+
+### Changed
+
+- The activity log's scrollbar now runs the full height of the log, square-ended against its edges.
+- The thin scrollbar is longer: in **Settings** and **About** its top now lines up with the first card, and the space for the arrows is smaller.
+
 ## [2.1.2] - 2026-10-26
 
 ### Changed

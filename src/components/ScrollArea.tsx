@@ -11,13 +11,18 @@ import {
 import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 
 // A Windows 11 scrollbar. The native one is hidden; this rail is drawn over the
-// content instead. At rest it's a thin line that stays visible whenever the
+// content instead, pinned to the visible area from inside the scrolling element
+// (position: sticky), so the wheel over it scrolls natively like anywhere else. At rest it's a thin line that stays visible whenever the
 // content overflows. Under the cursor it grows into a track with arrows and a
 // wider thumb (like Settings), and shrinks back shortly after the cursor leaves.
 // Scrolling itself is still the browser's (wheel, keyboard, touch, virtualizer).
 
-/** Space kept at each end of the track for the arrow buttons. */
-const ARROW = 14;
+/**
+ * Space kept at each end of the track for the arrows. Kept in both states,
+ * like Windows: the thumb's range never changes, so it doesn't jump when the
+ * bar grows or shrinks.
+ */
+const ARROW = 12;
 /** Shortest the thumb gets on very long content. */
 const MIN_THUMB = 24;
 /** One arrow click, about three lines. */
@@ -40,19 +45,32 @@ const useStyles = makeStyles({
     flex: '1 1 auto',
     minHeight: 0,
     overflowY: 'auto',
+    // Virtual lists correct the scroll position themselves; the browser's own
+    // anchoring would correct twice.
+    overflowAnchor: 'none',
     scrollbarWidth: 'none',
     '::-webkit-scrollbar': { display: 'none' },
   },
+  // What `viewportClassName` styles: the content, at least as tall as the view.
+  content: { display: 'flow-root', minHeight: '100%', boxSizing: 'border-box' },
+  // Zero-height and stuck to the top of the visible area, so the rail inside
+  // stays put while the content scrolls. Being inside the scrolling element is
+  // what makes the wheel over the rail scroll it.
+  pin: { position: 'sticky', top: 0, height: 0, zIndex: 1 },
+  // Top flush with the region, so the track lines up with the first card.
+  // Its height is set from the viewport's (see `update`).
   rail: {
     position: 'absolute',
-    top: '1px',
+    top: 0,
     right: '1px',
-    bottom: '1px',
     width: '14px',
     zIndex: 1,
     userSelect: 'none',
     touchAction: 'none',
   },
+  // Inside a panel (the activity log): the track fills the panel's full height,
+  // square-ended against its header and edge, instead of a floating pill.
+  railFlush: { right: 0 },
   hidden: { display: 'none' },
   // Fades in behind the thumb when expanded.
   track: {
@@ -67,6 +85,11 @@ const useStyles = makeStyles({
     transitionTimingFunction: tokens.curveEasyEase,
     '@media (prefers-reduced-motion: reduce)': { transitionDuration: '0.01ms' },
   },
+  trackFlush: {
+    borderRadius: 0,
+    border: 'none',
+    borderLeft: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
   trackOn: { opacity: 0.96 },
   thumb: {
     position: 'absolute',
@@ -75,18 +98,14 @@ const useStyles = makeStyles({
     width: '2px',
     borderRadius: tokens.borderRadiusCircular,
     backgroundColor: tokens.colorNeutralForeground4,
-    transitionProperty: 'width, right, background-color',
+    transitionProperty: 'width, right',
     transitionDuration: tokens.durationFast,
     transitionTimingFunction: tokens.curveEasyEase,
     willChange: 'transform',
     '@media (prefers-reduced-motion: reduce)': { transitionDuration: '0.01ms' },
   },
-  thumbOn: {
-    right: '4px',
-    width: '6px',
-    ':hover': { backgroundColor: tokens.colorNeutralForeground3 },
-  },
-  thumbDragging: { backgroundColor: tokens.colorNeutralForeground2, ':hover': { backgroundColor: tokens.colorNeutralForeground2 } },
+  // Same colour at rest, under the pointer and while dragged, like Windows.
+  thumbOn: { right: '4px', width: '6px' },
   arrow: {
     position: 'absolute',
     left: 0,
@@ -108,20 +127,34 @@ const useStyles = makeStyles({
 });
 
 export interface ScrollAreaProps extends HTMLAttributes<HTMLDivElement> {
-  /** Classes for the scrolling element (padding, display, gap…). */
+  /** Classes for the content inside the scrolling element (padding, display, gap…). */
   viewportClassName?: string;
   /** The scrolling element itself, e.g. for a virtualizer. */
   viewportRef?: Ref<HTMLDivElement>;
   /** Classes for the outer box (its size and place in the layout). */
   className?: string;
+  /**
+   * `floating` (default): a rounded track inset from the edges, for page-level
+   * scrolling. `flush`: the track runs the full height, square-ended, for a
+   * region inside a panel.
+   */
+  variant?: 'floating' | 'flush';
 }
 
 /**
  * A vertical scroll region with a Windows 11 style scrollbar. `className`
- * places and sizes the outer box; everything else (children, handlers, data-
- * and aria- attributes) goes to the scrolling element.
+ * places and sizes the outer box; `viewportClassName` styles the content
+ * (padding, display, gap…); handlers, data- and aria- attributes go to the
+ * scrolling element.
  */
-export function ScrollArea({ className, viewportClassName, viewportRef, children, ...viewportProps }: ScrollAreaProps) {
+export function ScrollArea({
+  className,
+  viewportClassName,
+  viewportRef,
+  variant = 'floating',
+  children,
+  ...viewportProps
+}: ScrollAreaProps) {
   const styles = useStyles();
   const viewport = useRef<HTMLDivElement | null>(null);
   const rail = useRef<HTMLDivElement>(null);
@@ -132,6 +165,7 @@ export function ScrollArea({ className, viewportClassName, viewportRef, children
   const collapseTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const repeat = useRef<{ delay?: ReturnType<typeof setTimeout>; every?: ReturnType<typeof setInterval> }>({});
   const expanded = hovered || dragging;
+  const flush = variant === 'flush';
 
   const setViewport = useCallback(
     (el: HTMLDivElement | null) => {
@@ -148,33 +182,41 @@ export function ScrollArea({ className, viewportClassName, viewportRef, children
     if (!el) return null;
     const { scrollHeight, clientHeight, scrollTop } = el;
     // From the viewport, not the rail: the rail is display: none (0px) until
-    // there's something to scroll. It spans the viewport less 1px each end.
-    const track = clientHeight - 2 - ARROW * 2;
+    // there's something to scroll. A floating rail is inset 1px at the bottom.
+    const track = clientHeight - (flush ? 0 : 1) - ARROW * 2;
     const range = scrollHeight - clientHeight;
     if (range <= 1 || track <= 0 || clientHeight === 0) return null;
     const length = Math.max(MIN_THUMB, Math.min(track, (clientHeight / scrollHeight) * track));
     const travel = track - length;
     return { length, travel, range, offset: ARROW + (travel * scrollTop) / range };
-  }, []);
+  }, [flush]);
 
   // Written straight to the DOM on every scroll: no React render per frame.
   const update = useCallback(() => {
     const g = geometry();
     setOverflowing(g !== null);
     const t = thumb.current;
+    const r = rail.current;
+    if (r && viewport.current) r.style.height = `${viewport.current.clientHeight - (flush ? 0 : 1)}px`;
     if (!g || !t) return;
     t.style.height = `${g.length}px`;
     t.style.transform = `translateY(${g.offset}px)`;
-  }, [geometry]);
+  }, [geometry, flush]);
 
   useLayoutEffect(() => {
     const el = viewport.current;
     if (!el) return;
     update();
     el.addEventListener('scroll', update, { passive: true });
+    // Size and content changes come in bursts (a batch of log lines is many
+    // DOM changes): measure once per frame, not once per change.
+    let frame = 0;
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(() => ((frame = 0), update()));
+    };
     // Re-measure when the region or anything directly in it changes size
     // (log lines arriving, a section expanding, the window resizing).
-    const sizes = new ResizeObserver(update);
+    const sizes = new ResizeObserver(schedule);
     const observeAll = () => {
       sizes.disconnect();
       sizes.observe(el);
@@ -185,11 +227,12 @@ export function ScrollArea({ className, viewportClassName, viewportRef, children
     // flex item), so any change inside re-measures too.
     const changes = new MutationObserver((records) => {
       if (records.some((r) => r.target === el)) observeAll();
-      update();
+      schedule();
     });
     changes.observe(el, { childList: true, subtree: true });
     return () => {
       el.removeEventListener('scroll', update);
+      cancelAnimationFrame(frame);
       sizes.disconnect();
       changes.disconnect();
     };
@@ -283,42 +326,44 @@ export function ScrollArea({ className, viewportClassName, viewportRef, children
 
   return (
     <div className={mergeClasses(styles.root, className)}>
-      <div ref={setViewport} className={mergeClasses(styles.viewport, viewportClassName)} {...viewportProps}>
-        {children}
-      </div>
-      <div
-        ref={rail}
-        className={mergeClasses(styles.rail, !overflowing && styles.hidden)}
-        aria-hidden
-        data-scrollbar
-        onPointerEnter={onEnter}
-        onPointerLeave={onLeave}
-        onPointerDown={onTrackDown}
-        onPointerUp={stopRepeat}
-        onPointerCancel={stopRepeat}
-      >
-        <div className={mergeClasses(styles.track, expanded && styles.trackOn)} style={{ pointerEvents: 'none' }} />
-        <div
-          className={mergeClasses(styles.arrow, styles.up, expanded && styles.arrowOn)}
-          onPointerDown={scrollByLine(-1)}
-          onPointerUp={stopRepeat}
-          onPointerCancel={stopRepeat}
-        >
-          <Chevron up />
+      <div ref={setViewport} className={styles.viewport} {...viewportProps}>
+        <div className={styles.pin}>
+          <div
+            ref={rail}
+            className={mergeClasses(styles.rail, flush && styles.railFlush, !overflowing && styles.hidden)}
+            aria-hidden
+            data-scrollbar
+            onPointerEnter={onEnter}
+            onPointerLeave={onLeave}
+            onPointerDown={onTrackDown}
+            onPointerUp={stopRepeat}
+            onPointerCancel={stopRepeat}
+          >
+            <div className={mergeClasses(styles.track, flush && styles.trackFlush, expanded && styles.trackOn)} style={{ pointerEvents: 'none' }} />
+            <div
+              className={mergeClasses(styles.arrow, styles.up, expanded && styles.arrowOn)}
+              onPointerDown={scrollByLine(-1)}
+              onPointerUp={stopRepeat}
+              onPointerCancel={stopRepeat}
+            >
+              <Chevron up />
+            </div>
+            <div
+              ref={thumb}
+              className={mergeClasses(styles.thumb, expanded && styles.thumbOn)}
+              onPointerDown={onThumbDown}
+            />
+            <div
+              className={mergeClasses(styles.arrow, styles.down, expanded && styles.arrowOn)}
+              onPointerDown={scrollByLine(1)}
+              onPointerUp={stopRepeat}
+              onPointerCancel={stopRepeat}
+            >
+              <Chevron />
+            </div>
+          </div>
         </div>
-        <div
-          ref={thumb}
-          className={mergeClasses(styles.thumb, expanded && styles.thumbOn, dragging && styles.thumbDragging)}
-          onPointerDown={onThumbDown}
-        />
-        <div
-          className={mergeClasses(styles.arrow, styles.down, expanded && styles.arrowOn)}
-          onPointerDown={scrollByLine(1)}
-          onPointerUp={stopRepeat}
-          onPointerCancel={stopRepeat}
-        >
-          <Chevron />
-        </div>
+        <div className={mergeClasses(styles.content, viewportClassName)}>{children}</div>
       </div>
     </div>
   );

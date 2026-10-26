@@ -42,9 +42,6 @@ const useStyles = makeStyles({
   scrollArea: { flex: 1 },
   scroller: {
     position: 'relative',
-    // The virtualizer corrects the scroll position itself when rows above the
-    // viewport are measured; the browser's own anchoring would correct twice.
-    overflowAnchor: 'none',
     fontSize: tokens.fontSizeBase300,
     lineHeight: tokens.lineHeightBase300,
   },
@@ -121,8 +118,10 @@ const useStyles = makeStyles({
   'filled-success': { backgroundColor: tokens.colorPaletteGreenBackground3, color: tokens.colorNeutralForegroundOnBrand },
   'filled-informative': { backgroundColor: tokens.colorNeutralBackground5, color: tokens.colorNeutralForeground3 },
   'filled-danger': { backgroundColor: tokens.colorPaletteRedBackground3, color: tokens.colorNeutralForegroundOnBrand },
+  // Fills the list's area (the content box is at least the view's height).
   empty: {
-    height: '100%',
+    position: 'absolute',
+    inset: 0,
     display: 'grid',
     placeItems: 'center',
     color: tokens.colorNeutralForeground3,
@@ -206,60 +205,17 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
   const styles = useStyles();
   const [filter, setFilter] = useState<Filter>('all');
   const [follow, setFollow] = useState(true);
-  const [atBottom, setAtBottom] = useState(true);
   const [copied, setCopied] = useState(false);
-  const scroller = useRef<HTMLDivElement>(null);
-
-  const lastScrollTop = useRef(0);
 
   const issues = useMemo(() => logs.filter((e) => e.level === 'warn' || e.level === 'error'), [logs]);
   const visible = filter === 'all' ? logs : issues;
   const issueCount = issues.length;
-
-  const virtualizer = useVirtualizer({
-    count: visible.length,
-    getScrollElement: () => scroller.current,
-    estimateSize: () => ROW_ESTIMATE,
-    getItemKey: (index) => visible[index].id,
-    overscan: OVERSCAN,
-    paddingStart: LIST_PADDING,
-    paddingEnd: LIST_PADDING,
-  });
-  const totalSize = virtualizer.getTotalSize();
-  const items = virtualizer.getVirtualItems();
-
-  // Stick to the bottom while following (also once wrapped rows are measured).
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el && follow && atBottom) el.scrollTop = el.scrollHeight;
-  }, [visible.length, totalSize, follow, atBottom]);
-
-  // The Fetch page is hidden (display: none) on other tabs, which resets
-  // scroll positions. Coming back, put the reader where they were.
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el && !(follow && atBottom)) el.scrollTop = lastScrollTop.current;
-    // Only on show: the effect above handles following.
-  }, []);
 
   useEffect(() => {
     if (!copied) return;
     const t = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(t);
   }, [copied]);
-
-  const onScroll = () => {
-    const el = scroller.current;
-    if (!el || !el.clientHeight) return; // hidden
-    lastScrollTop.current = el.scrollTop;
-    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
-  };
-
-  const jumpToEnd = () => {
-    const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
-    setAtBottom(true);
-  };
 
   const copy = async () => {
     try {
@@ -292,41 +248,110 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
         </Tooltip>
       </div>
 
-      <div className={styles.jumpWrap}>
-        <ScrollArea
-          className={styles.scrollArea}
-          viewportClassName={styles.scroller}
-          viewportRef={scroller}
-          onScroll={onScroll}
-          data-allow-context-menu
-        >
-          {visible.length ? (
-            // The rendered rows sit in normal flow between two spacers that
-            // stand in for the rows above and below. Rows are never placed at
-            // an estimated offset, so a new line can't be drawn overlapping
-            // its neighbours for a frame before it's measured (the flicker in
-            // beta 5); estimates only ever size the off-screen spacers.
-            <div style={{ paddingTop: items[0]?.start ?? 0, paddingBottom: totalSize - (items.at(-1)?.end ?? 0) }}>
-              {items.map((item) => (
-                <Row
-                  key={item.key}
-                  entry={visible[item.index]}
-                  index={item.index}
-                  styles={styles}
-                  measure={virtualizer.measureElement}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className={styles.empty}>{filter === 'all' ? 'Nothing logged yet.' : 'No warnings or errors.'}</div>
-          )}
-        </ScrollArea>
-        {!atBottom && visible.length > 0 && (
-          <Button className={styles.jump} appearance="primary" shape="circular" size="small" icon={<ArrowDownRegular />} onClick={jumpToEnd}>
-            Latest
-          </Button>
-        )}
-      </div>
+      <LogList
+        entries={visible}
+        follow={follow}
+        empty={filter === 'all' ? 'Nothing logged yet.' : 'No warnings or errors.'}
+        styles={styles}
+      />
     </section>
   );
 }
+
+interface LogListProps {
+  entries: LogEntry[];
+  follow: boolean;
+  empty: string;
+  styles: Styles;
+}
+
+// The scrolling list on its own: scrolling re-renders only this (the rows in
+// view), never the header's tabs, switch and buttons above it.
+const LogList = memo(function LogList({ entries, follow, empty, styles }: LogListProps) {
+  const [atBottom, setAtBottom] = useState(true);
+  const scroller = useRef<HTMLDivElement>(null);
+  const lastScrollTop = useRef(0);
+
+  const virtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => ROW_ESTIMATE,
+    getItemKey: (index) => entries[index].id,
+    overscan: OVERSCAN,
+    paddingStart: LIST_PADDING,
+    paddingEnd: LIST_PADDING,
+    // Don't force a synchronous React render on every scroll event (the
+    // default): with lines arriving mid-fetch, that kept interrupting and
+    // redoing the background render of new lines, and scrolling stuttered.
+    // The overscan rows cover the frame until the render lands.
+    useFlushSync: false,
+  });
+  const totalSize = virtualizer.getTotalSize();
+  const items = virtualizer.getVirtualItems();
+
+  // Stick to the bottom while following (also once wrapped rows are measured).
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && follow && atBottom) el.scrollTop = el.scrollHeight;
+  }, [entries.length, totalSize, follow, atBottom]);
+
+  // The Fetch page is hidden (display: none) on other tabs, which resets
+  // scroll positions. Coming back, put the reader where they were.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && !(follow && atBottom)) el.scrollTop = lastScrollTop.current;
+    // Only on show: the effect above handles following.
+  }, []);
+
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el || !el.clientHeight) return; // hidden
+    lastScrollTop.current = el.scrollTop;
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
+  };
+
+  const jumpToEnd = () => {
+    const el = scroller.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setAtBottom(true);
+  };
+
+  return (
+    <div className={styles.jumpWrap}>
+      <ScrollArea
+        className={styles.scrollArea}
+        variant="flush"
+        viewportClassName={styles.scroller}
+        viewportRef={scroller}
+        onScroll={onScroll}
+        data-allow-context-menu
+      >
+        {entries.length ? (
+          // The rendered rows sit in normal flow between two spacers that
+          // stand in for the rows above and below. Rows are never placed at
+          // an estimated offset, so a new line can't be drawn overlapping
+          // its neighbours for a frame before it's measured (the flicker in
+          // beta 5); estimates only ever size the off-screen spacers.
+          <div style={{ paddingTop: items[0]?.start ?? 0, paddingBottom: totalSize - (items.at(-1)?.end ?? 0) }}>
+            {items.map((item) => (
+              <Row
+                key={item.key}
+                entry={entries[item.index]}
+                index={item.index}
+                styles={styles}
+                measure={virtualizer.measureElement}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className={styles.empty}>{empty}</div>
+        )}
+      </ScrollArea>
+      {!atBottom && entries.length > 0 && (
+        <Button className={styles.jump} appearance="primary" shape="circular" size="small" icon={<ArrowDownRegular />} onClick={jumpToEnd}>
+          Latest
+        </Button>
+      )}
+    </div>
+  );
+});
