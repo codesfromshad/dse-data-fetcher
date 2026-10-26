@@ -6,6 +6,16 @@ export const APP_NAME = 'DSE Data Fetcher';
 
 /** Raw semver, e.g. "2.0.0-beta.1". */
 export const APP_VERSION: string = __APP_VERSION__;
+/** Short commit hash this build is from ("-dirty" with local changes). */
+export const BUILD_COMMIT: string = __BUILD_COMMIT__;
+/** When this build was made. */
+export const BUILD_TIME = new Date(__BUILD_TIME__);
+/** The build's commit on GitHub (none for a dirty or unknown build). */
+export const buildCommitUrl = () =>
+  /^[0-9a-f]{7}$/.test(BUILD_COMMIT) ? `https://github.com/${GITHUB_REPO}/commit/${BUILD_COMMIT}` : null;
+/** e.g. "27 October 2026, 02:15", in the user's locale. */
+export const formatBuildTime = () =>
+  BUILD_TIME.toLocaleString(undefined, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 /** True for pre-release builds (anything with a "-beta", "-rc"... suffix). */
 export const IS_PRERELEASE = APP_VERSION.includes('-');

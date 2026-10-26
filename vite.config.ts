@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { transform as transformCss } from 'lightningcss';
 import { defineConfig, type Plugin } from 'vite';
@@ -5,6 +6,22 @@ import react from '@vitejs/plugin-react';
 import { griffel } from '@griffel/vite-plugin';
 // The single source of the version (`bun run release` bumps it).
 import pkg from './package.json' with { type: 'json' };
+
+/**
+ * Which commit this build is from, for About → System information. In the
+ * release workflow that's GITHUB_SHA (the tagged commit); locally it's git's
+ * HEAD, marked "-dirty" when there are uncommitted changes. "unknown" if git
+ * isn't available.
+ */
+function buildCommit() {
+  const git = (args: string) => execSync(`git ${args}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+  try {
+    return git('rev-parse --short=7 HEAD') + (git('status --porcelain') ? '-dirty' : '');
+  } catch {
+    return 'unknown';
+  }
+}
 
 // Set by `tauri dev` when running on a phone/remote device; unused on desktop.
 const host = process.env.TAURI_DEV_HOST;
@@ -79,7 +96,11 @@ function minifyCssAfterGriffel(): Plugin {
 export default defineConfig({
   // Order matters: the CSS minifier must run after Griffel's extract step.
   plugins: [react(), ...fluentRawStyles(), griffel(), minifyCssAfterGriffel()],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_COMMIT__: JSON.stringify(buildCommit()),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
 
   // Tauri expects a fixed port and shows its own (Rust) errors in the terminal.
   clearScreen: false,

@@ -38,6 +38,9 @@ import { hasContent, isUnreleased } from '../lib/changelog';
 import {
   APP_NAME,
   APP_VERSION,
+  BUILD_COMMIT,
+  buildCommitUrl,
+  formatBuildTime,
   AUTHOR,
   DATA_POINTS,
   displayVersion,
@@ -183,7 +186,8 @@ function LinkRow({ icon: Icon, title, description, onClick }: { icon: FluentIcon
 
 function systemInfoText(build: BuildInfo | null, channel: string) {
   return [
-    `${APP_NAME} ${APP_VERSION}${build?.debug ? ' (debug build)' : ''}`,
+    `${APP_NAME} ${APP_VERSION}`,
+    `Build: ${BUILD_COMMIT} (${build?.debug ? 'debug' : 'release'}), ${formatBuildTime()}`,
     `Update channel: ${channel}`,
     `Tauri: ${build?.tauriVersion ?? 'unknown'}`,
     `WebView2: ${build?.webviewVersion ?? 'unknown'}`,
@@ -206,6 +210,8 @@ export function AboutView() {
   const latest =
     RELEASES.find((r) => r.version === APP_VERSION && hasContent(r)) ?? RELEASES.find((r) => !isUnreleased(r) && hasContent(r));
 
+  const commitUrl = buildCommitUrl();
+
   const copyInfo = async () => {
     await navigator.clipboard.writeText(systemInfoText(build, channel)).catch(() => {});
     setCopied(true);
@@ -213,7 +219,9 @@ export function AboutView() {
   };
 
   const info: [string, string][] = [
-    ['Version', `${displayVersion(APP_VERSION)}${build?.debug ? ' (debug)' : ''}`],
+    ['Version', displayVersion(APP_VERSION)],
+    ['Build', `${BUILD_COMMIT} · ${build ? (build.debug ? 'Debug' : 'Release') : '…'}`],
+    ['Built', formatBuildTime()],
     ['Update channel', channel === 'beta' ? 'Beta' : 'Stable'],
     ['Tauri', build?.tauriVersion ?? '…'],
     ['WebView2', build?.webviewVersion ?? '…'],
@@ -341,6 +349,18 @@ export function AboutView() {
           <Caption1 block>
             Made with <HeartFilled className={styles.heart} aria-label="love" /> in Dhaka, Bangladesh for EDGE Asset
             Management by {AUTHOR.name}.
+          </Caption1>
+          <Caption1 block>
+            Version {displayVersion(APP_VERSION)} · Build{' '}
+            {commitUrl ? (
+              <Link inline className={styles.footerLink} title={commitUrl} onClick={open(commitUrl)}>
+                {BUILD_COMMIT}
+                <OpenRegular className={styles.footerOpen} aria-hidden />
+              </Link>
+            ) : (
+              BUILD_COMMIT
+            )}{' '}
+            · {formatBuildTime()}
           </Caption1>
           <Caption1 block>
             {FOOTER_LINKS.map(({ id, label }, i) => {
