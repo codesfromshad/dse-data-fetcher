@@ -37,7 +37,6 @@ import {
   APP_NAME,
   APP_VERSION,
   AUTHOR,
-  BRAND_NAME,
   COPYRIGHT_LINE,
   DATA_POINTS,
   displayVersion,
@@ -304,13 +303,16 @@ export function AboutView() {
           <Caption1 block>
             <ShieldRegular style={{ verticalAlign: 'middle' }} /> No telemetry. Your data stays on this PC.
           </Caption1>
+          <Caption1 block>{COPYRIGHT_LINE}</Caption1>
           <Caption1 block>
-            {COPYRIGHT_LINE} · {BRAND_NAME}
-          </Caption1>
-          <Caption1 block>
-            Made in Bangladesh by {AUTHOR.name} · <DocumentTextRegular style={{ verticalAlign: 'middle' }} />{' '}
-            <Link inline onClick={() => setLegal(LEGAL_DOCS[0])}>
+            Made with ❤️ in Dhaka, Bangladesh for EDGE Asset Management by {AUTHOR.name} ·{' '}
+            <DocumentTextRegular style={{ verticalAlign: 'middle' }} />{' '}
+            <Link inline onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'eula') ?? null)}>
               License
+            </Link>{' '}
+            · <LockClosedRegular style={{ verticalAlign: 'middle' }} />{' '}
+            <Link inline onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'privacy') ?? null)}>
+              Privacy Policy
             </Link>
           </Caption1>
         </footer>

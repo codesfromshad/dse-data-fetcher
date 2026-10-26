@@ -22,6 +22,7 @@ it as the GitHub release notes and the in-app "What's new".
 ### Changed
 
 - The fetch buttons now read **Start fetching** and **Stop fetching** (was Start fetch and Cancel).
+- The About page footer now links to the **Privacy Policy** as well as the License.
 
 ### Fixed
 
