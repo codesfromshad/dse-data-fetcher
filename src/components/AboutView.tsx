@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   Badge,
   Body1,
@@ -18,7 +18,6 @@ import {
   ChevronRightRegular,
   CodeRegular,
   CopyRegular,
-  DocumentTextRegular,
   GlobeRegular,
   LockClosedRegular,
   MailRegular,
@@ -142,6 +141,14 @@ const LEGAL_ICONS: Record<LegalDocId, FluentIcon> = {
   privacy: LockClosedRegular,
   'third-party': CodeRegular,
 };
+
+/** The legal documents, as short links in the footer (same icons as the Legal card). */
+const FOOTER_LINKS: { id: LegalDocId; label: string }[] = [
+  { id: 'eula', label: 'License' },
+  { id: 'disclaimer', label: 'Disclaimer' },
+  { id: 'privacy', label: 'Privacy' },
+  { id: 'third-party', label: 'Open-source' },
+];
 
 function LinkRow({ icon: Icon, title, description, onClick }: { icon: FluentIcon; title: string; description?: string; onClick: () => void }) {
   const styles = useStyles();
@@ -306,16 +313,21 @@ export function AboutView() {
             <ShieldRegular style={{ verticalAlign: 'middle' }} /> No telemetry. Your data stays on this PC.
           </Caption1>
           <Caption1 block>{COPYRIGHT_LINE}</Caption1>
+          <Caption1 block>Made with ❤️ in Dhaka, Bangladesh for EDGE Asset Management by {AUTHOR.name}</Caption1>
           <Caption1 block>
-            Made with ❤️ in Dhaka, Bangladesh for EDGE Asset Management by {AUTHOR.name} ·{' '}
-            <DocumentTextRegular style={{ verticalAlign: 'middle' }} />{' '}
-            <Link inline className={styles.footerLink} onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'eula') ?? null)}>
-              License
-            </Link>{' '}
-            · <LockClosedRegular style={{ verticalAlign: 'middle' }} />{' '}
-            <Link inline className={styles.footerLink} onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'privacy') ?? null)}>
-              Privacy
-            </Link>
+            {FOOTER_LINKS.map(({ id, label }, i) => {
+              const doc = LEGAL_DOCS.find((d) => d.id === id);
+              const Icon = LEGAL_ICONS[id];
+              return (
+                <Fragment key={id}>
+                  {i > 0 && ' · '}
+                  <Icon style={{ verticalAlign: 'middle' }} />{' '}
+                  <Link inline className={styles.footerLink} onClick={() => setLegal(doc ?? null)}>
+                    {label}
+                  </Link>
+                </Fragment>
+              );
+            })}
           </Caption1>
         </footer>
       </div>
