@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.0.0-beta.6] - 2026-10-26
+
 ### Fixed
 
 - The activity log no longer flickers when new lines come in. New lines were briefly drawn on top of each other before settling into place.
