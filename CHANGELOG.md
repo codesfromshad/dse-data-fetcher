@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-26
+
 The first stable release of the DSE Data Fetcher desktop app. Everything from the 2.0 betas is now on the Stable channel: the Windows app, automatic updates, network metrics, the faster activity log and instant tab switching.
 
 ### Added
