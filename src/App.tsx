@@ -1,4 +1,4 @@
-import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Activity, startTransition, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -37,19 +37,25 @@ import { useUpdater } from './hooks/useUpdater';
 import { APP_NAME, APP_VERSION, displayVersion, IS_PRERELEASE } from './lib/description';
 import { describeError } from './lib/errors';
 import { effectiveApp, openFile } from './lib/native';
+import { preloadable } from './lib/preload';
 
 // Settings and About aren't needed for the first paint, so they (and the
-// Dropdown/SpinButton/legal texts only they use) load as separate chunks,
-// fetched once the app is idle so switching tabs is still instant.
-const loadSettings = () => import('./components/SettingsView');
-const loadAbout = () => import('./components/AboutView');
-const SettingsView = lazy(() => loadSettings().then((m) => ({ default: m.SettingsView })));
-const AboutView = lazy(() => loadAbout().then((m) => ({ default: m.AboutView })));
+// Dropdown/SpinButton/legal texts only they use) load as separate chunks.
+// Once the window is idle their code is fetched and both pages are rendered,
+// hidden, in the background (see `prerendered` below), so the first click on
+// either tab only has to show them, like a native app's tabs.
+const settingsPage = preloadable(() => import('./components/SettingsView').then((m) => m.SettingsView));
+const aboutPage = preloadable(() => import('./components/AboutView').then((m) => m.AboutView));
+const SettingsView = settingsPage.Component;
+const AboutView = aboutPage.Component;
 
-function preloadPages() {
-  const run = () => void Promise.all([loadSettings(), loadAbout()]).catch(() => {});
-  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 2000 });
-  else setTimeout(run, 500);
+function whenIdle(run: () => void) {
+  if ('requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(run, { timeout: 1500 });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = setTimeout(run, 300);
+  return () => clearTimeout(id);
 }
 
 const useStyles = makeStyles({
@@ -104,10 +110,20 @@ export default function App() {
   const [page, setPage] = useState<Page>('fetch');
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [notice, setNotice] = useState<string | null>(null);
-  // Pages stay mounted once opened and are hidden instead (see <Activity>
-  // below), so coming back to one doesn't rebuild it.
-  const [opened, setOpened] = useState<ReadonlySet<Page>>(() => new Set(['fetch']));
-  if (!opened.has(page)) setOpened(new Set([...opened, page]));
+  // Every page stays mounted and is hidden instead (see <Activity> below), so
+  // switching tabs never rebuilds one. Settings and About join once their
+  // code is in, rendered at idle priority while hidden.
+  const [prerendered, setPrerendered] = useState(false);
+  useEffect(
+    () =>
+      whenIdle(() => {
+        void Promise.all([settingsPage.preload(), aboutPage.preload()])
+          .catch(() => {}) // a click on the tab loads it (and shows any error) instead
+          .finally(() => startTransition(() => setPrerendered(true)));
+      }),
+    [],
+  );
+  const mounted = (p: Page) => p === page || p === 'fetch' || prerendered;
 
   const hasApp = effectiveApp(system.spreadsheet) !== null;
   const ready = system.checks.filter((c) => c.id !== 'spreadsheet').every((c) => c.state === 'ok');
@@ -127,8 +143,6 @@ export default function App() {
   // On launch: run the system check, then start fetching (like the CLI did)
   // only if everything passed and auto-fetch is on. Otherwise the check card
   // says what's wrong (or waits for Start fetch).
-  useEffect(preloadPages, []);
-
   const booted = useRef(false);
   const { start } = run;
   const { run: runCheck } = system;
@@ -273,18 +287,21 @@ export default function App() {
 
             <LogView logs={run.logs} onClear={run.clearLogs} />
         </Activity>
-        <Suspense fallback={null}>
-          {opened.has('settings') && (
-            <Activity mode={page === 'settings' ? 'visible' : 'hidden'} name="Settings">
+        {/* One boundary per page: a page still loading never blanks another. */}
+        {mounted('settings') && (
+          <Activity mode={page === 'settings' ? 'visible' : 'hidden'} name="Settings">
+            <Suspense fallback={null}>
               <SettingsView system={system} section={settingsSection} onSectionChange={setSettingsSection} />
-            </Activity>
-          )}
-          {opened.has('about') && (
-            <Activity mode={page === 'about' ? 'visible' : 'hidden'} name="About">
+            </Suspense>
+          </Activity>
+        )}
+        {mounted('about') && (
+          <Activity mode={page === 'about' ? 'visible' : 'hidden'} name="About">
+            <Suspense fallback={null}>
               <AboutView />
-            </Activity>
-          )}
-        </Suspense>
+            </Suspense>
+          </Activity>
+        )}
       </main>
 
       <CloseDialog locked={close.locked} onRetry={close.retry} onCloseAnyway={close.closeAnyway} onStay={close.stay} />
