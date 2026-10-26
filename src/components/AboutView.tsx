@@ -136,7 +136,8 @@ const useStyles = makeStyles({
   footerIcon: { verticalAlign: 'middle', marginRight: '3px' },
   // "Opens in the browser", after the GitHub handle (as on log symbols).
   footerOpen: { verticalAlign: '-1px', marginLeft: '2px', fontSize: '11px' },
-  heart: { verticalAlign: 'middle', color: tokens.colorPaletteRedForeground1 },
+  // The footer's own text colour.
+  heart: { verticalAlign: 'middle' },
   footer: { textAlign: 'center', color: tokens.colorNeutralForeground3, padding: `${tokens.spacingVerticalS} 0` },
 });
 
