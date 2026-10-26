@@ -129,6 +129,8 @@ const useStyles = makeStyles({
   linkIcon: { fontSize: '20px', color: tokens.colorBrandForeground1, flexShrink: 0 },
   linkText: { flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 },
   chevron: { color: tokens.colorNeutralForeground3 },
+  // Links in the footer: the footer's own (caption) size, not Link's default.
+  footerLink: { fontSize: 'inherit', lineHeight: 'inherit' },
   footer: { textAlign: 'center', color: tokens.colorNeutralForeground3, padding: `${tokens.spacingVerticalS} 0` },
 });
 
@@ -307,12 +309,12 @@ export function AboutView() {
           <Caption1 block>
             Made with ❤️ in Dhaka, Bangladesh for EDGE Asset Management by {AUTHOR.name} ·{' '}
             <DocumentTextRegular style={{ verticalAlign: 'middle' }} />{' '}
-            <Link inline onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'eula') ?? null)}>
+            <Link inline className={styles.footerLink} onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'eula') ?? null)}>
               License
             </Link>{' '}
             · <LockClosedRegular style={{ verticalAlign: 'middle' }} />{' '}
-            <Link inline onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'privacy') ?? null)}>
-              Privacy Policy
+            <Link inline className={styles.footerLink} onClick={() => setLegal(LEGAL_DOCS.find((d) => d.id === 'privacy') ?? null)}>
+              Privacy
             </Link>
           </Caption1>
         </footer>
