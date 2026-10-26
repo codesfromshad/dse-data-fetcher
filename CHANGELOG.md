@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.0.0-beta.5] - 2026-10-26
+
 ### Changed
 
 - The **Elapsed** timer now counts in milliseconds while fetching, not just when the run ends.

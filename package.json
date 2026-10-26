@@ -1,6 +1,6 @@
 {
   "name": "dse-data-fetcher",
-  "version": "2.0.0-beta.4",
+  "version": "2.0.0-beta.5",
   "description": "Fetches company data from the Dhaka Stock Exchange website into an Excel workbook.",
   "author": "Shadman Rafid Chowdhury (codesfromshad) <contact@codesfromshad.com>",
   "license": "SEE LICENSE IN legal/EULA.txt",
