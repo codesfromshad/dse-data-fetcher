@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.6] - 2026-10-27
+
 ### Added
 
 - **Keep or delete spreadsheets when you close the app**, in Settings → Fetching → When you close the app. On (the default) deletes this session's temporary spreadsheets as before; off keeps them in your temp folder, including when an update installs.
