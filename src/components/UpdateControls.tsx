@@ -31,6 +31,7 @@ import {
 } from '@fluentui/react-icons';
 import { useSettings } from '../hooks/useSettings';
 import { useUpdater, type UpdateStatus } from '../hooks/useUpdater';
+import { useRetained } from '../hooks/useRetained';
 import { APP_NAME, APP_VERSION, displayVersion } from '../lib/description';
 import type { LockedFile } from '../lib/native';
 import type { UpdateInfo } from '../lib/settings';
@@ -141,9 +142,12 @@ function useInstallFlow() {
     setLocked([]);
     setLocked(await install(force));
   };
+  const open = locked.length > 0;
+  // The list empties as the dialog closes; keep showing it while it animates out.
+  const shown = useRetained(locked, open);
   const dialog = (
-    <Dialog open={locked.length > 0} modalType="alert" onOpenChange={(_, d) => !d.open && setLocked([])}>
-      <LockedDialogBody locked={locked} onRetry={() => void start()} onForce={() => void start(true)} onCancel={() => setLocked([])} />
+    <Dialog open={open} modalType="alert" onOpenChange={(_, d) => !d.open && setLocked([])}>
+      <LockedDialogBody locked={shown} onRetry={() => void start()} onForce={() => void start(true)} onCancel={() => setLocked([])} />
     </Dialog>
   );
   return { start, dialog };
@@ -182,12 +186,14 @@ function LockedDialogBody(props: { locked: LockedFile[]; onRetry: () => void; on
 
 export function UpdateNotesDialog({ update, open, onClose }: { update: UpdateInfo | null; open: boolean; onClose: () => void }) {
   const styles = useStyles();
-  const release = update ? notesToRelease(update.version, update.notes) : null;
+  // Keep the notes while the dialog animates out, even if `update` clears.
+  const shown = useRetained(update, open && !!update);
+  const release = shown ? notesToRelease(shown.version, shown.notes) : null;
   return (
     <Dialog open={open && !!update} onOpenChange={(_, d) => !d.open && onClose()}>
       <DialogSurface className={styles.surface}>
         <DialogBody>
-          <DialogTitle>What’s new in {update ? displayVersion(update.version) : ''}</DialogTitle>
+          <DialogTitle>What’s new in {shown ? displayVersion(shown.version) : ''}</DialogTitle>
           <DialogContent className={styles.scroll}>
             {release ? <ReleaseBlock release={release} headless /> : <Body1>No release notes were published for this version.</Body1>}
           </DialogContent>

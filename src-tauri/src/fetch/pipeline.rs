@@ -10,8 +10,9 @@ use tokio_util::sync::CancellationToken;
 use super::{
     dse::{is_treasury_bond, Dse},
     http::{describe_error, Cancelled, GetError, HttpError},
-    log::{hl, hl_as, parts, pill, Level, Part, Tone},
+    log::{hl, hl_as, parts, pill, symbol as symbol_link, symbol_list, Level, Part, Tone},
     metrics::{format_bytes, format_rate, Metrics, Snapshot},
+    pause::Pause,
     parse::{parse_company_page, CompanyRow, ParseResult},
     time::format_duration,
     workbook::incomplete_fields,
@@ -48,6 +49,8 @@ pub trait Sink: Sync {
 pub struct Options<'a> {
     pub base_url: &'a str,
     pub cancel: &'a CancellationToken,
+    /// Held before each company page (and retry) while the run is paused.
+    pub pause: &'a Pause,
     /// Byte/request counters for every request of the run.
     pub metrics: &'a Metrics,
     pub sink: &'a dyn Sink,
@@ -118,7 +121,7 @@ async fn fetch_company(dse: &Dse<'_>, symbol: &str, cancel: &CancellationToken) 
 }
 
 pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
-    let Options { base_url, cancel, sink, max_retries, metrics, .. } = options;
+    let Options { base_url, cancel, pause, sink, max_retries, metrics, .. } = options;
     let shared = Mutex::new(Shared::default());
     let report = |stage: Stage, status: String| sink.progress(stage, status, shared.lock().unwrap().counts);
     let retry_logger = |what: &'static str| {
@@ -136,10 +139,12 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
 
     let dse = Dse::new(base_url, metrics);
     report(Stage::Connecting, format!("Fetching cookie from {base_url}..."));
+    pause.wait(cancel).await?;
     dse.fetch_cookie(cancel, retry_logger("Fetching the cookie")).await?;
     sink.log(Level::Success, parts![format!("Cookie fetched from {base_url} successfully!")]);
 
     report(Stage::Symbols, "Fetching ticker symbols...".into());
+    pause.wait(cancel).await?;
     let symbols = dse.fetch_symbols(cancel, retry_logger("Fetching ticker symbols")).await?;
     shared.lock().unwrap().counts.total = symbols.len();
     sink.log(
@@ -162,7 +167,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
         drop(s);
         sink.log(
             Level::Warn,
-            parts!["Kept incomplete data for ", hl(symbol), " after ", attempts, ". Blank: ", hl_as(missing.join(", "), Tone::Subtle)],
+            parts!["Kept incomplete data for ", symbol_link(symbol), " after ", attempts, ". Blank: ", hl_as(missing.join(", "), Tone::Subtle)],
         );
     };
 
@@ -175,7 +180,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
         async move {
             if is_treasury_bond(&symbol) {
                 shared.lock().unwrap().counts.skipped += 1;
-                sink.log(Level::Info, parts!["Skipping treasury bond ", hl(&symbol), "..."]);
+                sink.log(Level::Info, parts!["Skipping treasury bond ", symbol_link(&symbol), "..."]);
                 company_progress();
                 return Ok::<(), Cancelled>(());
             }
@@ -184,6 +189,8 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
             let mut partial: Option<(CompanyRow, Vec<&'static str>)> = None;
 
             for attempt in 1u32.. {
+                // Paused: in-flight pages finish, but this one waits.
+                pause.wait(cancel).await?;
                 if cancel.is_cancelled() {
                     return Err(Cancelled);
                 }
@@ -203,7 +210,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                                 Level::Warn,
                                 parts![
                                     "Failed to fetch stock data for ",
-                                    hl(&symbol),
+                                    symbol_link(&symbol),
                                     " ",
                                     hl_as(format!("({})", describe_error(&error)), Tone::Subtle),
                                     format!(". Retrying ({retry_label})..."),
@@ -223,7 +230,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                                 Level::Error,
                                 parts![
                                     "Failed to fetch stock data for ",
-                                    hl(&symbol),
+                                    symbol_link(&symbol),
                                     " after ",
                                     attempts,
                                     ": ",
@@ -238,7 +245,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                 let row = match result {
                     ParseResult::Skip(reason) => {
                         shared.lock().unwrap().counts.skipped += 1;
-                        sink.log(Level::Info, parts![format!("Skipping {reason} "), hl(&symbol), "..."]);
+                        sink.log(Level::Info, parts![format!("Skipping {reason} "), symbol_link(&symbol), "..."]);
                         break;
                     }
                     ParseResult::Row(row) => *row,
@@ -251,7 +258,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                     s.counts.fetched += 1;
                     drop(s);
                     let after = if attempt > 1 { format!(" (after {attempt} attempts)") } else { String::new() };
-                    sink.log(Level::Success, parts!["Fetched stock data for ", hl(&symbol), after]);
+                    sink.log(Level::Success, parts!["Fetched stock data for ", symbol_link(&symbol), after]);
                     break;
                 }
 
@@ -268,7 +275,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                     Level::Warn,
                     parts![
                         "Incomplete data for ",
-                        hl(&symbol),
+                        symbol_link(&symbol),
                         " ",
                         hl_as(format!("(NaN/missing: {missing_text})"), Tone::Subtle),
                         format!(". Fetching again ({retry_label})..."),
@@ -331,10 +338,14 @@ pub fn log_complete(sink: &dyn Sink, fetched: &Fetched, elapsed: Duration, netwo
         );
     }
     if !fetched.failed_symbols.is_empty() {
-        sink.log(Level::Warn, parts!["Failed symbols: ", hl(fetched.failed_symbols.join(", "))]);
+        let mut line = parts!["Failed symbols: "];
+        line.extend(symbol_list(&fetched.failed_symbols));
+        sink.log(Level::Warn, line);
     }
     if !incomplete.is_empty() {
-        sink.log(Level::Warn, parts!["Symbols with blank (NaN/missing) values: ", hl(incomplete.join(", "))]);
+        let mut line = parts!["Symbols with blank (NaN/missing) values: "];
+        line.extend(symbol_list(incomplete));
+        sink.log(Level::Warn, line);
     }
 }
 
@@ -421,6 +432,54 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn pausing_holds_new_pages_until_resumed_or_stopped() {
+        let base = serve().await;
+        let max_retries = || Some(2);
+
+        // Paused from the start: nothing is requested until it's resumed.
+        {
+            let (cancel, pause, metrics, sink) = (CancellationToken::new(), Pause::default(), Metrics::default(), VecSink::default());
+            pause.set(true);
+            let run = fetch_all(Options {
+                base_url: &base,
+                cancel: &cancel,
+                pause: &pause,
+                metrics: &metrics,
+                sink: &sink,
+                max_retries: &max_retries,
+                retry_unit: Duration::from_millis(1),
+                retry_cap: Duration::from_millis(5),
+            });
+            tokio::pin!(run);
+            assert!(tokio::time::timeout(Duration::from_millis(150), &mut run).await.is_err(), "held while paused");
+            assert_eq!(metrics.requests(), 0);
+            pause.set(false);
+            let fetched = run.await.unwrap_or_else(|e| panic!("{e:?}"));
+            assert_eq!(fetched.counts, Counts { total: 6, fetched: 3, skipped: 2, failed: 1 });
+        }
+
+        // Stopping while paused ends the run.
+        {
+            let (cancel, pause, metrics, sink) = (CancellationToken::new(), Pause::default(), Metrics::default(), VecSink::default());
+            pause.set(true);
+            let run = fetch_all(Options {
+                base_url: &base,
+                cancel: &cancel,
+                pause: &pause,
+                metrics: &metrics,
+                sink: &sink,
+                max_retries: &max_retries,
+                retry_unit: Duration::from_millis(1),
+                retry_cap: Duration::from_millis(5),
+            });
+            tokio::pin!(run);
+            assert!(tokio::time::timeout(Duration::from_millis(50), &mut run).await.is_err());
+            cancel.cancel();
+            assert!(matches!(run.await, Err(RunError::Cancelled)));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn full_run_against_a_fake_dse() {
         let base = serve().await;
         let sink = VecSink::default();
@@ -434,6 +493,7 @@ mod tests {
         let fetched = fetch_all(Options {
             base_url: &base,
             cancel: &cancel,
+            pause: &Pause::default(),
             metrics: &metrics,
             sink: &sink,
             max_retries: &max_retries,
@@ -491,6 +551,7 @@ mod tests {
         let result = fetch_all(Options {
             base_url: &base,
             cancel: &cancel,
+            pause: &Pause::default(),
             metrics: &Metrics::default(),
             sink: &sink,
             max_retries: &|| None,

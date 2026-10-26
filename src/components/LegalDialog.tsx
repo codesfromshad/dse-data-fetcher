@@ -14,6 +14,7 @@ import {
 } from '@fluentui/react-components';
 import { CopyRegular } from '@fluentui/react-icons';
 import type { LegalDoc } from '../lib/legal';
+import { useRetained } from '../hooks/useRetained';
 import { ScrollArea } from './ScrollArea';
 
 const useStyles = makeStyles({
@@ -82,22 +83,24 @@ interface Props {
 
 export function LegalDialog({ doc, onClose }: Props) {
   const styles = useStyles();
+  // Closing clears `doc`; keep showing it while the dialog animates out.
+  const shown = useRetained(doc, !!doc);
   return (
     <Dialog open={!!doc} onOpenChange={(_, d) => !d.open && onClose()}>
       <DialogSurface className={styles.surface}>
-        {doc && (
+        {shown && (
           <DialogBody>
-            <DialogTitle>{doc.title}</DialogTitle>
+            <DialogTitle>{shown.title}</DialogTitle>
             <DialogContent className={styles.content}>
               <ScrollArea className={styles.scrollArea} viewportClassName={styles.scroll} data-allow-context-menu>
-                <LegalText text={doc.text} />
+                <LegalText text={shown.text} />
               </ScrollArea>
             </DialogContent>
             <DialogActions>
               <Button
                 appearance="subtle"
                 icon={<CopyRegular />}
-                onClick={() => void navigator.clipboard.writeText(doc.text).catch(() => {})}
+                onClick={() => void navigator.clipboard.writeText(shown.text).catch(() => {})}
               >
                 Copy text
               </Button>

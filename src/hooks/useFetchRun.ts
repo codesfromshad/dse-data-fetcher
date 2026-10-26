@@ -1,9 +1,11 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { onConnectivity } from '../lib/connectivity';
+import { onActivity } from '../lib/native';
 import { describeError } from '../lib/errors';
 import {
   cancelFetch,
   isFetchError,
+  setFetchPaused,
   startFetch,
   type FetchEvent,
   type FetchResult,
@@ -50,6 +52,10 @@ export function useFetchRun() {
   const [error, setError] = useState<RunError | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
+  // Pausing: when the current pause began, and the time spent paused before
+  // it, so the elapsed clock stops while paused (Rust leaves it out too).
+  const [pausedAt, setPausedAt] = useState<number | null>(null);
+  const [pausedMs, setPausedMs] = useState(0);
 
   const running = useRef(false);
   const pendingLogs = useRef<LogEntry[]>([]);
@@ -107,6 +113,16 @@ export function useFetchRun() {
     [schedule],
   );
 
+  // Lines Rust writes outside a fetch (deleting the temporary spreadsheet).
+  useEffect(
+    () =>
+      onActivity((lines) => {
+        for (const line of lines) pendingLogs.current.push({ id: nextId.current++, ...line });
+        schedule();
+      }),
+    [schedule],
+  );
+
   /** A line from this side (run separators, IPC trouble). Rust's lines arrive formatted. */
   const log = useCallback(
     (level: LogLevel, parts: LogPart[]) => {
@@ -147,6 +163,8 @@ export function useFetchRun() {
       pendingNetwork.current = null;
       setStartedAt(performance.now());
       setFinishedAt(null);
+      setPausedAt(null);
+      setPausedMs(0);
       setProgress({ ...EMPTY_PROGRESS, status: 'Starting...' });
       if (nextId.current > 0) log('info', ['──────── New run ────────']);
 
@@ -174,7 +192,13 @@ export function useFetchRun() {
         })
         .finally(() => {
           running.current = false;
-          setFinishedAt(performance.now());
+          const now = performance.now();
+          // Stopped while paused: that pause ends here.
+          setPausedAt((at) => {
+            if (at !== null) setPausedMs((ms) => ms + (now - at));
+            return null;
+          });
+          setFinishedAt(now);
         });
     },
     [flush, log, onEvent],
@@ -184,10 +208,47 @@ export function useFetchRun() {
     if (running.current) void cancelFetch();
   }, []);
 
+  /** Pause or resume. The clock follows what Rust reports back. */
+  const setPaused = useCallback(async (paused: boolean) => {
+    if (!running.current) return;
+    try {
+      const now = performance.now();
+      const isPaused = await setFetchPaused(paused);
+      if (!running.current) return;
+      setPausedAt((at) => {
+        if (isPaused) return at ?? now;
+        if (at !== null) setPausedMs((ms) => ms + (now - at));
+        return null;
+      });
+    } catch (error) {
+      log('error', [`Couldn't ${paused ? 'pause' : 'resume'} the fetch: ${describeError(error)}`]);
+    }
+  }, [log]);
+  const pause = useCallback(() => void setPaused(true), [setPaused]);
+  const resume = useCallback(() => void setPaused(false), [setPaused]);
+
   const clearLogs = useCallback(() => {
     pendingLogs.current = [];
     setLogs([]);
   }, []);
 
-  return { phase, progress, logs, network, result, error, startedAt, finishedAt, start, cancel, clearLogs };
+  const paused = pausedAt !== null;
+  return {
+    phase,
+    progress,
+    logs,
+    network,
+    result,
+    error,
+    startedAt,
+    finishedAt,
+    paused,
+    pausedAt,
+    pausedMs,
+    start,
+    cancel,
+    pause,
+    resume,
+    clearLogs,
+  };
 }

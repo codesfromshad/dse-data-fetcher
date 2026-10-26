@@ -13,6 +13,7 @@ import {
   CheckmarkCircleFilled,
   DismissCircleFilled,
   ErrorCircleFilled,
+  PauseCircleRegular,
   PlayCircleRegular,
 } from '@fluentui/react-icons';
 import type { Phase } from '../hooks/useFetchRun';
@@ -93,7 +94,17 @@ const TITLES: Record<Phase, string> = {
  * DOM. While the Fetch page is hidden the effect is torn down (see App's
  * <Activity>), so the clock costs nothing on other pages.
  */
-function ElapsedClock({ startedAt, finishedAt, className }: { startedAt: number | null; finishedAt: number | null; className: string }) {
+interface ClockProps {
+  startedAt: number | null;
+  finishedAt: number | null;
+  /** When the current pause began (the clock stands still), or null. */
+  pausedAt: number | null;
+  /** Time spent in earlier pauses, left out of the elapsed time. */
+  pausedMs: number;
+  className: string;
+}
+
+function ElapsedClock({ startedAt, finishedAt, pausedAt, pausedMs, className }: ClockProps) {
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -102,19 +113,20 @@ function ElapsedClock({ startedAt, finishedAt, className }: { startedAt: number 
       el.textContent = '—';
       return;
     }
-    if (finishedAt !== null) {
-      el.textContent = formatElapsed(finishedAt - startedAt);
+    const stoppedAt = finishedAt ?? pausedAt;
+    if (stoppedAt !== null) {
+      el.textContent = formatElapsed(stoppedAt - startedAt - pausedMs);
       return;
     }
     let frame = 0;
     const tick = () => {
-      const text = formatElapsed(performance.now() - startedAt);
+      const text = formatElapsed(performance.now() - startedAt - pausedMs);
       if (el.textContent !== text) el.textContent = text;
       frame = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(frame);
-  }, [startedAt, finishedAt]);
+  }, [startedAt, finishedAt, pausedAt, pausedMs]);
   return <span ref={ref} className={className} role="timer" aria-live="off" />;
 }
 
@@ -123,6 +135,9 @@ interface Props {
   progress: Progress;
   startedAt: number | null;
   finishedAt: number | null;
+  paused: boolean;
+  pausedAt: number | null;
+  pausedMs: number;
   /** null until the first sample arrives. */
   network: NetworkMetrics | null;
   showNetwork: boolean;
@@ -135,7 +150,7 @@ interface Stat {
   title?: string;
 }
 
-export function RunCard({ phase, progress, startedAt, finishedAt, network, showNetwork }: Props) {
+export function RunCard({ phase, progress, startedAt, finishedAt, paused, pausedAt, pausedMs, network, showNetwork }: Props) {
   const styles = useStyles();
   const running = phase === 'running';
   const { counts } = progress;
@@ -155,7 +170,7 @@ export function RunCard({ phase, progress, startedAt, finishedAt, network, showN
 
   const icon = {
     idle: <PlayCircleRegular className={styles.muted} />,
-    running: <Spinner size="small" />,
+    running: paused ? <PauseCircleRegular className={styles.muted} /> : <Spinner size="small" />,
     done: <CheckmarkCircleFilled className={styles.ok} />,
     failed: <ErrorCircleFilled className={styles.bad} />,
     cancelled: <DismissCircleFilled className={styles.muted} />,
@@ -193,8 +208,14 @@ export function RunCard({ phase, progress, startedAt, finishedAt, network, showN
       <div className={styles.top}>
         <div className={styles.icon}>{icon}</div>
         <div className={styles.heading}>
-          <Subtitle1>{TITLES[phase]}</Subtitle1>
-          <Body1 className={styles.status}>{phase === 'idle' ? 'Press “Start fetch” to download the latest data.' : progress.status}</Body1>
+          <Subtitle1>{running && paused ? 'Fetch paused' : TITLES[phase]}</Subtitle1>
+          <Body1 className={styles.status}>
+            {phase === 'idle'
+              ? 'Press “Start fetching” to download the latest data.'
+              : running && paused
+                ? `${progress.status} · Press “Resume fetching” to carry on.`
+                : progress.status}
+          </Body1>
         </div>
       </div>
 
@@ -214,7 +235,7 @@ export function RunCard({ phase, progress, startedAt, finishedAt, network, showN
           </div>
         ))}
         <div className={styles.stat} title={finishedAt !== null ? 'Total time, to the millisecond' : undefined}>
-          <ElapsedClock startedAt={startedAt} finishedAt={finishedAt} className={mergeClasses(styles.statValue, styles.clock)} />
+          <ElapsedClock startedAt={startedAt} finishedAt={finishedAt} pausedAt={pausedAt} pausedMs={pausedMs} className={mergeClasses(styles.statValue, styles.clock)} />
           <Caption1 className={styles.statLabel}>Elapsed</Caption1>
         </div>
       </div>

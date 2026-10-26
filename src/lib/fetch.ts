@@ -1,5 +1,5 @@
 // Typed wrappers for the fetch commands in src-tauri/src/fetch/. All fetching,
-// parsing and the workbook happen in Rust; this side only starts/cancels a run
+// parsing and the workbook happen in Rust; this side only starts, pauses and stops a run
 // and renders the events it streams back.
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { LogLevel, LogPart } from './log';
@@ -80,5 +80,11 @@ export function startFetch(openAfter: boolean, onEvent: (event: FetchEvent) => v
   return invoke<FetchResult>('start_fetch', { openAfter, onEvent: channel });
 }
 
-/** Stop the running fetch; `startFetch` then rejects with kind "cancelled". */
+/** Stop the running fetch (also while paused); `startFetch` then rejects with kind "cancelled". */
 export const cancelFetch = () => invoke<void>('cancel_fetch');
+
+/**
+ * Pause or resume the running fetch. Pages already downloading finish; no new
+ * ones start while paused. Resolves with whether the run is now paused.
+ */
+export const setFetchPaused = (paused: boolean) => invoke<boolean>('set_fetch_paused', { paused });

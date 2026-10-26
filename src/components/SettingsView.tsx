@@ -21,15 +21,18 @@ import {
   Tab,
   TabList,
   Title3,
+  Tooltip,
   makeStyles,
   tokens,
 } from '@fluentui/react-components';
 import {
+  ArrowClockwiseRegular,
   ArrowDownloadRegular,
   ArrowRepeatAllRegular,
   ArrowResetRegular,
   ArrowSyncRegular,
   BranchForkRegular,
+  BroomRegular,
   DarkThemeRegular,
   DataTrendingRegular,
   DataUsageRegular,
@@ -47,7 +50,8 @@ import { useSettings } from '../hooks/useSettings';
 import type { SystemCheck } from '../hooks/useSystemCheck';
 import { APP_VERSION, displayVersion, IS_PRERELEASE } from '../lib/description';
 import { describeError } from '../lib/errors';
-import { effectiveApp } from '../lib/native';
+import { formatBytes } from '../lib/format';
+import { cleanTempSpreadsheets, effectiveApp, findTempSpreadsheets, type CleanupReport, type TempSpreadsheet } from '../lib/native';
 import {
   DEFAULT_FETCH_RETRIES,
   MAX_FETCH_RETRIES,
@@ -105,6 +109,21 @@ const useStyles = makeStyles({
   dropdown: { minWidth: '210px' },
   spin: { width: '96px' },
   muted: { color: tokens.colorNeutralForeground3 },
+  warnText: { color: tokens.colorPaletteMarigoldForeground1 },
+  tempFiles: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS },
+  tempList: { maxHeight: '180px' },
+  tempUl: { margin: 0, padding: `0 ${tokens.spacingHorizontalL} 0 0`, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalXS },
+  tempItem: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, minWidth: 0 },
+  tempIcon: { fontSize: '18px', color: tokens.colorPaletteGreenForeground1, flexShrink: 0 },
+  tempName: {
+    fontFamily: tokens.fontFamilyMonospace,
+    fontSize: tokens.fontSizeBase200,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flex: 1,
+    minWidth: 0,
+  },
   app: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalM },
   appIcon: { fontSize: '28px', color: tokens.colorPaletteGreenForeground1, flexShrink: 0 },
   appIconMissing: { fontSize: '28px', color: tokens.colorNeutralForeground4, flexShrink: 0 },
@@ -323,7 +342,7 @@ function RetriesRow({ act }: { act: Act }) {
       title="Retries per company"
       description={
         unlimited
-          ? 'Keeps trying a company page until it loads with every value. Cancel the fetch to stop.'
+          ? 'Keeps trying a company page until it loads with every value. Use Stop fetching to end the run.'
           : 'How many times to try a company page again if it doesn’t load or has missing values. After that, the row is kept with blank cells, or marked as failed.'
       }
     >
@@ -452,11 +471,131 @@ function SystemSection({ system, act }: { system: SystemCheck; act: Act }) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Temp spreadsheets in the temp folder: this session's and any left behind
+ * by earlier ones (a crash, a file still open in Excel when the app closed).
+ * Found when the page is shown; deleting logs each file in the activity log.
+ */
+function TempSpreadsheetsRow({ act }: { act: Act }) {
+  const styles = useStyles();
+  const [files, setFiles] = useState<TempSpreadsheet[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<CleanupReport | null>(null);
+  const [confirm, setConfirm] = useState(false);
+
+  const scan = act(async () => {
+    setFiles(await findTempSpreadsheets());
+  });
+  useEffect(() => {
+    void scan();
+    // Once per visit: the page is torn down while hidden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const clean = act(async () => {
+    setBusy(true);
+    try {
+      setReport(await cleanTempSpreadsheets());
+      setFiles(await findTempSpreadsheets());
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  const total = files?.reduce((sum, f) => sum + f.size, 0) ?? 0;
+  const sessionCount = files?.filter((f) => f.thisSession).length ?? 0;
+  const description =
+    files === null
+      ? 'Looking in your temp folder…'
+      : files.length === 0
+        ? 'Spreadsheets this app saves in your temp folder. None there right now.'
+        : `${files.length} in your temp folder · ${formatBytes(total)}. Includes any left behind by earlier sessions.`;
+
+  const left = report ? report.locked.length + report.failed : 0;
+  const summary = report && (
+    <Caption1 className={left ? styles.warnText : styles.muted}>
+      {report.deleted || left
+        ? `Deleted ${report.deleted} · freed ${formatBytes(report.freed)}${left ? ` · ${left} couldn’t be deleted (still open in another app?)` : ''}. Details are in the activity log.`
+        : 'Nothing to clean up.'}
+    </Caption1>
+  );
+
+  return (
+    <SettingRow
+      icon={<BroomRegular />}
+      title="Temporary spreadsheets"
+      description={description}
+      extra={
+        files && files.length > 0 ? (
+          <div className={styles.tempFiles}>
+            <ScrollArea className={styles.tempList}>
+              <ul className={styles.tempUl}>
+                {files.map((f) => (
+                  <li key={f.path} className={styles.tempItem} title={f.path}>
+                    <DocumentTableRegular className={styles.tempIcon} />
+                    <span className={styles.tempName}>{f.fileName}</span>
+                    {f.thisSession && (
+                      <Badge appearance="tint" color="brand" size="small">
+                        This session
+                      </Badge>
+                    )}
+                    <Caption1 className={styles.muted}>
+                      {formatBytes(f.size)}
+                      {f.modifiedMs ? ` · ${new Date(f.modifiedMs).toLocaleString()}` : ''}
+                    </Caption1>
+                  </li>
+                ))}
+              </ul>
+            </ScrollArea>
+            {summary}
+          </div>
+        ) : (
+          summary || undefined
+        )
+      }
+    >
+      <Tooltip content="Look again" relationship="label">
+        <Button appearance="subtle" icon={<ArrowClockwiseRegular />} disabled={busy} onClick={() => void scan()} />
+      </Tooltip>
+      <Button disabled={busy || !files?.length} onClick={() => (sessionCount ? setConfirm(true) : void clean())}>
+        Delete all
+      </Button>
+      {/* Only when this session's spreadsheet would go too. */}
+      <Dialog open={confirm} onOpenChange={(_, d) => setConfirm(d.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Delete this session’s spreadsheet too?</DialogTitle>
+            <DialogContent>
+              The list includes the spreadsheet from your last fetch. Once it’s deleted you can’t open it or save a copy
+              from the Fetch page; fetch again to get a new one.
+            </DialogContent>
+            <DialogActions>
+              <Button
+                appearance="primary"
+                onClick={() => {
+                  setConfirm(false);
+                  void clean();
+                }}
+              >
+                Delete all
+              </Button>
+              <DialogTrigger disableButtonEnhancement>
+                <Button>Cancel</Button>
+              </DialogTrigger>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </SettingRow>
+  );
+}
+
 function AdvancedSection({ act }: { act: Act }) {
   const { reset } = useSettings();
   const [confirm, setConfirm] = useState(false);
   return (
     <SettingsGroup title="Data">
+      <TempSpreadsheetsRow act={act} />
       <SettingRow
         icon={<FolderOpenRegular />}
         title="Settings folder"

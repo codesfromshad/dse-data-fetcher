@@ -15,10 +15,11 @@ import {
 import {
   ArrowSyncRegular,
   DataTrendingRegular,
-  DismissRegular,
   InfoRegular,
+  PauseRegular,
   PlayRegular,
   SettingsRegular,
+  StopRegular,
 } from '@fluentui/react-icons';
 import icon from './assets/icon.png';
 import { CloseDialog } from './components/CloseDialog';
@@ -75,6 +76,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   brand: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS },
+  runButtons: { display: 'flex', gap: tokens.spacingHorizontalS },
   logo: { width: '24px', height: '24px' },
   appName: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400 },
   spacer: { flex: 1 },
@@ -104,7 +106,8 @@ type Page = 'fetch' | 'settings' | 'about';
 export default function App() {
   const styles = useStyles();
   const run = useFetchRun();
-  const close = useCloseGuard();
+  // Closing shows the activity log while the temp spreadsheets are deleted.
+  const close = useCloseGuard({ onCleanup: () => setPage('fetch') });
   const system = useSystemCheck();
   const { settings } = useSettings();
   const updater = useUpdater();
@@ -144,7 +147,7 @@ export default function App() {
 
   // On launch: run the system check, then start fetching (like the CLI did)
   // only if everything passed and auto-fetch is on. Otherwise the check card
-  // says what's wrong (or waits for Start fetch).
+  // says what's wrong (or waits for Start fetching).
   const booted = useRef(false);
   const { start } = run;
   const { run: runCheck } = system;
@@ -172,6 +175,7 @@ export default function App() {
   }, [system, run, ready, settings.autoFetchOnLaunch, settings.openAfterFetch]);
 
   const running = run.phase === 'running';
+  const pausable = running && ['connecting', 'symbols', 'companies'].includes(run.progress.stage);
   const updateReady = updater.status.kind === 'ready';
 
   return (
@@ -201,9 +205,22 @@ export default function App() {
         <div className={styles.spacer} />
 
         {running ? (
-          <Button icon={<DismissRegular />} onClick={run.cancel}>
-            Cancel
-          </Button>
+          <div className={styles.runButtons}>
+            {/* Only while pages are still to be fetched: past that, the run is
+                just writing the spreadsheet and there's nothing to pause. */}
+            {run.paused ? (
+              <Button appearance="primary" icon={<PlayRegular />} onClick={run.resume}>
+                Resume fetching
+              </Button>
+            ) : (
+              <Button icon={<PauseRegular />} disabled={!pausable} onClick={run.pause}>
+                Pause fetching
+              </Button>
+            )}
+            <Button icon={<StopRegular />} onClick={run.cancel}>
+              Stop fetching
+            </Button>
+          </div>
         ) : (
           <Button
             appearance="primary"
@@ -211,7 +228,7 @@ export default function App() {
             disabled={system.running && run.phase === 'idle'}
             onClick={startFetch}
           >
-            {run.phase === 'idle' ? 'Start fetch' : 'Fetch again'}
+            {run.phase === 'idle' ? 'Start fetching' : 'Fetch again'}
           </Button>
         )}
       </header>
@@ -248,6 +265,9 @@ export default function App() {
                   progress={run.progress}
                   startedAt={run.startedAt}
                   finishedAt={run.finishedAt}
+                  paused={run.paused}
+                  pausedAt={run.pausedAt}
+                  pausedMs={run.pausedMs}
                   network={run.network}
                   showNetwork={settings.showNetworkMetrics}
                 />

@@ -7,12 +7,13 @@ pub mod http;
 pub mod log;
 pub mod metrics;
 pub mod parse;
+pub mod pause;
 pub mod pipeline;
 pub mod time;
 pub mod workbook;
 
 use std::{
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -26,16 +27,24 @@ use dse::DSE_URL;
 use http::describe_error;
 use log::{hl, hl_as, parts, Level, Part, Tone};
 use metrics::{Meter, Metrics, Snapshot, SAMPLE_INTERVAL};
+use pause::Pause;
 use pipeline::{Counts, Options, RunError, Sink, Stage};
 
-/// The running fetch, if any, so `cancel_fetch` can stop it.
+/// The running fetch, if any, so `cancel_fetch` can stop it and
+/// `set_fetch_paused` pause it.
 #[derive(Default)]
 pub struct FetchState {
-    cancel: Mutex<Option<CancellationToken>>,
+    run: Mutex<Option<Controls>>,
+}
+
+#[derive(Clone)]
+struct Controls {
+    cancel: CancellationToken,
+    pause: Arc<Pause>,
 }
 
 /// Clears the running-fetch slot however the run ends.
-struct RunSlot<'a>(&'a Mutex<Option<CancellationToken>>);
+struct RunSlot<'a>(&'a Mutex<Option<Controls>>);
 
 impl Drop for RunSlot<'_> {
     fn drop(&mut self) {
@@ -204,19 +213,19 @@ pub async fn start_fetch(
     open_after: bool,
     on_event: Channel<FetchEvent>,
 ) -> Result<FetchResult, FetchError> {
-    let cancel = {
-        let mut slot = fetch.cancel.lock().unwrap();
+    let Controls { cancel, pause } = {
+        let mut slot = fetch.run.lock().unwrap();
         if slot.is_some() {
             return Err(FetchError::new("busy", "A fetch is already running."));
         }
-        let token = CancellationToken::new();
-        *slot = Some(token.clone());
-        token
+        let controls = Controls { cancel: CancellationToken::new(), pause: Arc::default() };
+        *slot = Some(controls.clone());
+        controls
     };
-    let _slot = RunSlot(&fetch.cancel);
+    let _slot = RunSlot(&fetch.run);
     let sink = ChannelSink::new(on_event);
 
-    let outcome = match run(&app, &state, &sink, &cancel, open_after).await {
+    let outcome = match run(&app, &state, &sink, &cancel, &pause, open_after).await {
         Ok(result) => Ok(result),
         Err(Failure::Cancelled) => {
             sink.log(Level::Warn, parts!["Fetch cancelled."]);
@@ -237,11 +246,25 @@ pub async fn start_fetch(
     outcome
 }
 
-/// Stop the running fetch (no-op when none is running).
+/// Stop the running fetch (no-op when none is running). Works while paused.
 #[tauri::command]
 pub fn cancel_fetch(fetch: State<'_, FetchState>) {
-    if let Some(token) = fetch.cancel.lock().unwrap().as_ref() {
-        token.cancel();
+    if let Some(run) = fetch.run.lock().unwrap().as_ref() {
+        run.cancel.cancel();
+    }
+}
+
+/// Pause or resume the running fetch. Pages already downloading finish; no
+/// new ones start while paused. Returns whether the run is now paused (false
+/// when none is running).
+#[tauri::command]
+pub fn set_fetch_paused(fetch: State<'_, FetchState>, paused: bool) -> bool {
+    match fetch.run.lock().unwrap().as_ref() {
+        Some(run) => {
+            run.pause.set(paused);
+            run.pause.is_paused()
+        }
+        None => false,
     }
 }
 
@@ -250,6 +273,7 @@ async fn run(
     state: &AppState,
     sink: &ChannelSink<impl Outbox>,
     cancel: &CancellationToken,
+    pause: &Pause,
     open_after: bool,
 ) -> Result<FetchResult, Failure> {
     let started = Instant::now();
@@ -272,6 +296,7 @@ async fn run(
     let fetch_all = pipeline::fetch_all(Options {
         base_url: DSE_URL,
         cancel,
+        pause,
         metrics: &metrics,
         sink,
         max_retries: &max_retries,
@@ -285,9 +310,21 @@ async fn run(
     // ...and send queued log lines that nothing else has pushed out.
     let mut log_ticker = tokio::time::interval(LOG_FLUSH_INTERVAL);
     log_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut paused = pause.subscribe();
     let fetched = loop {
         tokio::select! {
             result = &mut fetch_all => break result,
+            Ok(()) = paused.changed() => {
+                if *paused.borrow_and_update() {
+                    sink.log(
+                        Level::Warn,
+                        parts!["Fetch paused. Pages already downloading will finish; no new ones start until you resume."],
+                    );
+                } else {
+                    sink.log(Level::Info, parts!["Fetch resumed."]);
+                }
+                sink.flush();
+            }
             _ = ticker.tick() => {
                 let snapshot = meter.sample(&metrics);
                 if show_metrics() {
@@ -297,7 +334,8 @@ async fn run(
             _ = log_ticker.tick() => sink.flush(),
         }
     };
-    let elapsed = started.elapsed();
+    // Time spent paused doesn't count, for the elapsed time or average speed.
+    let elapsed = started.elapsed().saturating_sub(pause.total());
     let network = meter.finish(&metrics, elapsed);
     let show = show_metrics();
     if show {

@@ -4,7 +4,8 @@
 export type LogLevel = 'success' | 'info' | 'warn' | 'error';
 export type Tone = 'accent' | 'success' | 'info' | 'danger' | 'subtle';
 
-export type LogPart = string | { text: string; tone: Tone; badge?: boolean };
+/** `href`: opens in the browser when clicked (a symbol's company page). */
+export type LogPart = string | { text: string; tone: Tone; badge?: boolean; href?: string };
 
 export interface LogEntry {
   id: number;

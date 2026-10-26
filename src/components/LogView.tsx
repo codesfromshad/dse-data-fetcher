@@ -13,7 +13,8 @@ import {
   shorthands,
   tokens,
 } from '@fluentui/react-components';
-import { ArrowDownRegular, CopyRegular, DeleteRegular, TextBulletListLtrRegular } from '@fluentui/react-icons';
+import { ArrowDownRegular, CopyRegular, DeleteRegular, OpenRegular, TextBulletListLtrRegular } from '@fluentui/react-icons';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { ScrollArea } from './ScrollArea';
 import { entryToText, levelLabel, type LogEntry, type LogLevel, type LogPart, type Tone } from '../lib/log';
 
@@ -67,6 +68,21 @@ const useStyles = makeStyles({
   info: { color: tokens.colorPaletteBlueForeground2, fontWeight: tokens.fontWeightSemibold },
   danger: { color: tokens.colorPaletteRedForeground1, fontWeight: tokens.fontWeightSemibold },
   subtle: { color: tokens.colorNeutralForeground3 },
+  // A symbol: its company page on the DSE website. Same colour as the other
+  // highlights; underlined under the pointer, like a link.
+  link: {
+    textDecorationLine: 'none',
+    cursor: 'pointer',
+    ':hover': { textDecorationLine: 'underline' },
+    ':focus-visible': { textDecorationLine: 'underline', outline: `2px solid ${tokens.colorStrokeFocus2}`, borderRadius: tokens.borderRadiusSmall },
+  },
+  // "Opens in the browser", after the symbol. Not underlined with it.
+  linkIcon: {
+    display: 'inline-block',
+    marginLeft: '2px',
+    fontSize: '12px',
+    verticalAlign: '-1px',
+  },
 
   // Pills are plain spans styled like Fluent's Badge: hundreds of rows of
   // full Badge components cost a lot more to mount than they look.
@@ -158,6 +174,24 @@ function renderPart(part: LogPart, i: number, styles: Styles) {
       <span key={i} className={mergeClasses(styles.pill, styles.inlinePill, styles[INLINE_PILL[part.tone]])}>
         {part.text}
       </span>
+    );
+  }
+  if (part.href) {
+    const href = part.href;
+    return (
+      <a
+        key={i}
+        href={href}
+        title={href}
+        className={mergeClasses(styles[part.tone], styles.link)}
+        onClick={(e) => {
+          e.preventDefault();
+          void openUrl(href).catch(() => {});
+        }}
+      >
+        {part.text}
+        <OpenRegular className={styles.linkIcon} aria-hidden />
+      </a>
     );
   }
   return (

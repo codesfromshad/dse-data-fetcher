@@ -12,6 +12,7 @@ import {
 } from '@fluentui/react-components';
 import { DocumentTableRegular, LockClosedRegular } from '@fluentui/react-icons';
 import type { LockedFile } from '../lib/native';
+import { useRetained } from '../hooks/useRetained';
 import { ScrollArea } from './ScrollArea';
 
 // Laid out like a Windows 11 content dialog: title and text on the surface,
@@ -93,11 +94,14 @@ interface Props {
 }
 
 /** Shown on close when a temporary workbook is still open in another app. */
-export function CloseDialog({ locked, onRetry, onCloseAnyway, onStay }: Props) {
+export function CloseDialog({ locked: current, onRetry, onCloseAnyway, onStay }: Props) {
   const styles = useStyles();
+  const open = current.length > 0;
+  // The list empties as the dialog closes; keep showing it while it animates out.
+  const locked = useRetained(current, open);
   const one = locked.length === 1;
   return (
-    <Dialog open={locked.length > 0} modalType="alert" onOpenChange={(_, d) => !d.open && onStay()}>
+    <Dialog open={open} modalType="alert" onOpenChange={(_, d) => !d.open && onStay()}>
       <DialogSurface className={styles.surface}>
         <DialogBody className={styles.body}>
           <div className={styles.main}>

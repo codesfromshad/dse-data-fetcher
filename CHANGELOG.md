@@ -10,6 +10,21 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Added
+
+- **Pause fetching.** Pause a running fetch and resume it later. Pages already downloading finish; no new ones start until you press **Resume fetching**. You can still stop the fetch while it's paused. Time spent paused doesn't count towards the elapsed time or the average speed.
+- Company symbols in the activity log are now links: click one to open that company's page on the DSE website.
+- The activity log now says when the temporary spreadsheet is deleted, or why it couldn't be (for example, because it's still open in another app). When you close the app, it shows the log for a moment while it deletes the spreadsheet, then closes.
+- **Clean up temporary spreadsheets** in Settings → Advanced. Finds every spreadsheet this app has left in your temp folder, including ones from earlier sessions, with their sizes and dates, and deletes them all in one go.
+
+### Changed
+
+- The fetch buttons now read **Start fetching** and **Stop fetching** (was Start fetch and Cancel).
+
+### Fixed
+
+- Closing a dialog no longer flashes an empty box across the window. Dialogs now keep their content while they fade out.
+
 ## [2.1.4] - 2026-10-27
 
 ### Changed

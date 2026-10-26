@@ -202,7 +202,7 @@ export function SystemCheckCard({ system, onChooseApp, onStart, onDetails }: Car
         ]
       : problems.length
         ? ['Ready to fetch, with one note', 'Fetching will work. Here’s what to know first.', <ShieldCheckmarkRegular className={styles.warning} />]
-        : ['System check passed', 'Everything’s ready. Press “Start fetch” to download the latest data.', <ShieldCheckmarkRegular className={styles.ok} />];
+        : ['System check passed', 'Everything’s ready. Press “Start fetching” to download the latest data.', <ShieldCheckmarkRegular className={styles.ok} />];
 
   return (
     <section className={styles.card} aria-label="System check">

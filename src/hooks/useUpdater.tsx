@@ -87,7 +87,9 @@ export function UpdaterProvider({ children }: { children: ReactNode }) {
     const current = statusRef.current;
     if (current.kind !== 'ready') return [];
     if (!force) {
-      const locked = await deleteTempFiles().catch(() => []);
+      const locked = await deleteTempFiles()
+        .then((report) => report.locked)
+        .catch(() => []);
       if (locked.length) return locked;
     }
     setStatus({ kind: 'installing', update: current.update });

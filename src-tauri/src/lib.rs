@@ -29,8 +29,12 @@ use std::{
 use serde::Serialize;
 use settings::{Preferences, Settings, ThemePreference};
 use spreadsheet::AppInfo;
+use fetch::{
+    log::{hl, hl_as, parts, Level, Tone},
+    LogLine,
+};
 use tauri::{
-    window::Color, AppHandle, Manager, RunEvent, Runtime, State, Theme, WebviewWindow, WindowEvent,
+    window::Color, AppHandle, Emitter, Manager, RunEvent, Runtime, State, Theme, WebviewWindow, WindowEvent,
 };
 use tauri_plugin_opener::OpenerExt;
 
@@ -94,24 +98,207 @@ struct LockedFile {
     file_name: String,
 }
 
-/// Delete every temp file this app created. Returns the ones that are still
-/// open in another app (those stay tracked so a retry can try again).
-#[tauri::command]
-fn delete_temp_files(state: State<'_, AppState>) -> Vec<LockedFile> {
-    let mut temp_files = state.temp_files.lock().unwrap();
-    let mut locked = Vec::new();
-    temp_files.retain(|path| match delete_file(path) {
-        Ok(DeleteOutcome::Locked) => {
-            locked.push(LockedFile {
-                path: path.to_string_lossy().into_owned(),
-                file_name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-            });
-            true
+/// Activity-log lines from outside a fetch (temp-file cleanup), for the UI's
+/// log (`activity` events, see src/lib/native.ts).
+fn log_activity<R: Runtime>(app: &AppHandle<R>, lines: Vec<LogLine>) {
+    if !lines.is_empty() {
+        let _ = app.emit("activity", lines);
+    }
+}
+
+/// Delete one temp spreadsheet and say how it went, for the activity log.
+fn delete_logged(path: &Path) -> (Result<DeleteOutcome, String>, LogLine) {
+    let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let outcome = delete_file(path);
+    let line = match &outcome {
+        Ok(DeleteOutcome::Deleted) => LogLine::now(Level::Success, parts!["Deleted the temporary spreadsheet ", hl(&file_name), "."]),
+        Ok(DeleteOutcome::Gone) => {
+            LogLine::now(Level::Info, parts!["The temporary spreadsheet ", hl(&file_name), " was already deleted."])
         }
-        Ok(_) => false,
-        Err(_) => true,
+        Ok(DeleteOutcome::Locked) => LogLine::now(
+            Level::Warn,
+            parts![
+                "Couldn't delete the temporary spreadsheet ",
+                hl(&file_name),
+                ": it's still open in another app. Close it there, then try again."
+            ],
+        ),
+        Err(error) => LogLine::now(
+            Level::Error,
+            parts!["Couldn't delete the temporary spreadsheet ", hl(&file_name), " ", hl_as(format!("({error})"), Tone::Subtle), "."],
+        ),
+    };
+    (outcome, line)
+}
+
+fn locked_file(path: &Path) -> LockedFile {
+    LockedFile {
+        path: path.to_string_lossy().into_owned(),
+        file_name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteReport {
+    /// Deleted just now (not counting ones that were already gone).
+    deleted: usize,
+    /// Still open in another app; they stay tracked so a retry can try again.
+    locked: Vec<LockedFile>,
+}
+
+/// Delete every temp file this app created, logging what happened to each
+/// (on close, and before an update installs).
+#[tauri::command]
+fn delete_temp_files(app: AppHandle, state: State<'_, AppState>) -> DeleteReport {
+    let mut temp_files = state.temp_files.lock().unwrap();
+    let mut report = DeleteReport { deleted: 0, locked: Vec::new() };
+    let mut lines = Vec::new();
+    temp_files.retain(|path| {
+        let (outcome, line) = delete_logged(path);
+        lines.push(line);
+        match outcome {
+            Ok(DeleteOutcome::Deleted) => {
+                report.deleted += 1;
+                false
+            }
+            Ok(DeleteOutcome::Gone) => false,
+            Ok(DeleteOutcome::Locked) => {
+                report.locked.push(locked_file(path));
+                true
+            }
+            Err(_) => true,
+        }
     });
-    locked
+    drop(temp_files);
+    log_activity(&app, lines);
+    report
+}
+
+/// Workbooks this app writes, and the CLI before it: temp_stock_data_<time>.xlsx.
+fn is_temp_spreadsheet(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.starts_with("temp_stock_data_") && lower.ends_with(".xlsx")
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TempSpreadsheet {
+    path: String,
+    file_name: String,
+    size: u64,
+    /// Last modified, in ms since the Unix epoch (0 if unknown).
+    modified_ms: u64,
+    /// Written by this run of the app (the result on the Fetch page).
+    this_session: bool,
+}
+
+/// Every temp spreadsheet in `dir`, newest first.
+fn find_in(dir: &Path, this_session: &HashSet<PathBuf>) -> Vec<TempSpreadsheet> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut found: Vec<TempSpreadsheet> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            if !is_temp_spreadsheet(&file_name) {
+                return None;
+            }
+            // Not following links: only real files in the temp folder itself.
+            let meta = entry.metadata().ok().filter(|m| m.is_file())?;
+            let modified_ms = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_millis() as u64);
+            let path = entry.path();
+            Some(TempSpreadsheet {
+                this_session: this_session.contains(&path),
+                path: path.to_string_lossy().into_owned(),
+                file_name,
+                size: meta.len(),
+                modified_ms,
+            })
+        })
+        .collect();
+    found.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms).then_with(|| a.file_name.cmp(&b.file_name)));
+    found
+}
+
+/// The temp spreadsheets in the temp folder: this session's, and any left
+/// behind by earlier ones (a crash, a file that was open in Excel, the CLI).
+#[tauri::command]
+fn find_temp_spreadsheets(state: State<'_, AppState>) -> Vec<TempSpreadsheet> {
+    let this_session = state.temp_files.lock().unwrap().clone();
+    find_in(&std::env::temp_dir(), &this_session)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CleanupReport {
+    deleted: usize,
+    /// Bytes freed by the ones deleted.
+    freed: u64,
+    locked: Vec<LockedFile>,
+    failed: usize,
+}
+
+/// Delete every temp spreadsheet in the temp folder (found afresh here, never
+/// from a list the UI sends), logging each one and a summary.
+#[tauri::command]
+fn clean_temp_spreadsheets(app: AppHandle, state: State<'_, AppState>) -> CleanupReport {
+    let this_session = state.temp_files.lock().unwrap().clone();
+    let found = find_in(&std::env::temp_dir(), &this_session);
+    let mut report = CleanupReport { deleted: 0, freed: 0, locked: Vec::new(), failed: 0 };
+    let mut lines = Vec::new();
+    if found.is_empty() {
+        log_activity(&app, vec![LogLine::now(Level::Info, parts!["No temporary spreadsheets to clean up."])]);
+        return report;
+    }
+    lines.push(LogLine::now(
+        Level::Info,
+        parts![
+            "Cleaning up ",
+            hl(format!("{} temporary spreadsheet{}", found.len(), if found.len() == 1 { "" } else { "s" })),
+            " in the temp folder...",
+        ],
+    ));
+    for file in &found {
+        let path = PathBuf::from(&file.path);
+        let (outcome, line) = delete_logged(&path);
+        lines.push(line);
+        match outcome {
+            Ok(DeleteOutcome::Deleted) => {
+                report.deleted += 1;
+                report.freed += file.size;
+            }
+            Ok(DeleteOutcome::Gone) => {}
+            Ok(DeleteOutcome::Locked) => {
+                report.locked.push(locked_file(&path));
+                continue; // still there: keep tracking it
+            }
+            Err(_) => {
+                report.failed += 1;
+                continue;
+            }
+        }
+        state.temp_files.lock().unwrap().remove(&path);
+        state.known_files.lock().unwrap().remove(&path);
+    }
+    let left = report.locked.len() + report.failed;
+    let mut summary = parts![
+        "Cleanup done: deleted ",
+        hl(report.deleted),
+        ", freed ",
+        hl(fetch::metrics::format_bytes(report.freed)),
+    ];
+    if left > 0 {
+        summary.push(", ".into());
+        summary.push(hl_as(format!("{left} couldn't be deleted"), Tone::Danger));
+    }
+    summary.push(".".into());
+    lines.push(LogLine::now(if left > 0 { Level::Warn } else { Level::Success }, summary));
+    log_activity(&app, lines);
+    report
 }
 
 /// Best-effort delete of every temp file (used on exit and before an update
@@ -399,8 +586,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             fetch::start_fetch,
             fetch::cancel_fetch,
+            fetch::set_fetch_paused,
             connectivity::probe_connectivity,
             delete_temp_files,
+            find_temp_spreadsheets,
+            clean_temp_spreadsheets,
             open_file,
             reveal_file,
             save_copy,
@@ -428,4 +618,41 @@ pub fn run() {
                 delete_all_temp_files(app);
             }
         });
+}
+
+#[cfg(test)]
+mod temp_spreadsheet_tests {
+    use super::*;
+
+    #[test]
+    fn recognises_only_our_workbooks() {
+        assert!(is_temp_spreadsheet("temp_stock_data_2026-10-27_01_32_00.000_+0600.xlsx"));
+        assert!(is_temp_spreadsheet("TEMP_STOCK_DATA_x.XLSX"));
+        assert!(!is_temp_spreadsheet("stock_data.xlsx"));
+        assert!(!is_temp_spreadsheet("temp_stock_data_x.xlsx.tmp"));
+        assert!(!is_temp_spreadsheet("~$temp_stock_data_x.xlsx"), "Excel's lock file, not a workbook");
+    }
+
+    #[test]
+    fn finds_them_newest_first_and_flags_this_sessions() {
+        let dir = std::env::temp_dir().join(format!("dse_find_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("temp_stock_data_dir.xlsx")).unwrap(); // a folder: ignored
+        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+        let old = dir.join("temp_stock_data_old.xlsx");
+        std::fs::write(&old, b"old").unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        let new = dir.join("temp_stock_data_new.xlsx");
+        std::fs::write(&new, b"newer").unwrap();
+
+        let found = find_in(&dir, &HashSet::from([new.clone()]));
+        let names: Vec<_> = found.iter().map(|f| f.file_name.as_str()).collect();
+        assert_eq!(names, ["temp_stock_data_new.xlsx", "temp_stock_data_old.xlsx"]);
+        assert!(found[0].this_session && !found[1].this_session);
+        assert_eq!(found[0].size, 5);
+        assert!(found[0].modified_ms >= found[1].modified_ms && found[1].modified_ms > 0);
+
+        assert!(find_in(&dir.join("missing"), &HashSet::new()).is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
