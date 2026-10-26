@@ -46,6 +46,22 @@ if (import.meta.env.PROD) {
   });
 }
 
+// Like Windows: Ctrl+A only selects inside a text field or a region that
+// opts into selection, never the whole window.
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a') return;
+  const target = e.target as HTMLElement;
+  if (target.closest('input, textarea, [contenteditable]:not([contenteditable="false"])')) return;
+  e.preventDefault();
+  const selection = window.getSelection();
+  const region = selection?.anchorNode?.parentElement;
+  if (selection && region && getComputedStyle(region).userSelect === 'text') {
+    let scope: HTMLElement = region;
+    while (scope.parentElement && getComputedStyle(scope.parentElement).userSelect === 'text') scope = scope.parentElement;
+    selection.selectAllChildren(scope);
+  }
+});
+
 async function boot() {
   // Settings decide the theme, so load them before the first paint. If that
   // fails for any reason, start with defaults rather than not at all.

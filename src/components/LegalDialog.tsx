@@ -25,6 +25,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
     userSelect: 'text',
+    cursor: 'text',
   },
   heading: { margin: `${tokens.spacingVerticalM} 0 0` },
   para: { margin: 0, color: tokens.colorNeutralForeground2, whiteSpace: 'pre-wrap', lineHeight: tokens.lineHeightBase400 },

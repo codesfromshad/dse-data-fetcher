@@ -12,6 +12,28 @@
       @media (prefers-color-scheme: dark) { html { background: #141414; } }
       html, body, #root { height: 100%; margin: 0; }
       body { overflow: hidden; background: transparent; }
+      /* Native Windows cursors: controls (buttons, tabs, switches, checkboxes,
+         dropdowns, menu items, list rows) keep the arrow; only links get the
+         hand. !important beats Fluent's per-component cursor: pointer. */
+      button, select, label, summary,
+      input[type="checkbox"], input[type="radio"], input[type="range"],
+      input[type="button"], input[type="submit"], input[type="reset"],
+      [role="button"], [role="tab"], [role="switch"], [role="checkbox"],
+      [role="radio"], [role="menuitem"], [role="menuitemradio"],
+      [role="menuitemcheckbox"], [role="option"], [role="slider"],
+      [role="treeitem"], [role="combobox"]:not(input) { cursor: default !important; }
+      a[href], .fui-Link:not(:disabled):not([aria-disabled="true"]) { cursor: pointer !important; }
+      /* Native Windows text handling: labels, headings and controls can't be
+         selected or dragged and show the arrow, not the I-beam. Only text
+         fields, and regions that opt in with user-select: text (About
+         details, legal text), can be selected. */
+      html { cursor: default; user-select: none; -webkit-user-select: none; }
+      img, svg, a { -webkit-user-drag: none; }
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+      textarea, [contenteditable]:not([contenteditable="false"]) {
+        user-select: text; -webkit-user-select: text; cursor: text;
+      }
+      input:read-only:not(:focus) { cursor: default; }
     </style>
   </head>
   <body>
