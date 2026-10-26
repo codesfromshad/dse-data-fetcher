@@ -10,6 +10,13 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Changed
+
+- The **Elapsed** timer now counts in milliseconds while fetching, not just when the run ends.
+- Switching tabs is instant, even with thousands of lines in the activity log. Before, coming back to **Fetch** rebuilt the whole log (about a second with 2,000 lines on a typical laptop); now each page is kept in the background and the log only draws the lines on screen. Your place in the log is kept when you switch away and back.
+- New log lines never hold up a click: they're drawn at a lower priority than tab switches, Cancel and the rest of the window.
+- The native (Rust) core now sends log lines to the window in batches, already timestamped, instead of one message per line, so long runs put far less load on the window.
+
 ## [2.0.0-beta.4] - 2026-10-25
 
 ### Added

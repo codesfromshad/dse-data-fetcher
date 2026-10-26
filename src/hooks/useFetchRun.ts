@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { describeError } from '../lib/errors';
 import {
   cancelFetch,
@@ -15,9 +15,10 @@ import { logTimestamp, shortTime } from '../lib/time';
 export type Phase = 'idle' | 'running' | 'done' | 'failed' | 'cancelled';
 
 const MAX_LOG_ENTRIES = 2000;
-// Logs/progress/metrics are queued and applied at most this often, so a burst
-// of 50 log lines costs one React render instead of 50. The timer only runs
-// while something is queued, so an idle app doesn't wake up 20×/s.
+// Rust already sends log lines in batches; progress/metrics/log batches are
+// still queued and applied at most this often, so they share one React
+// render. The timer only runs while something is queued, so an idle app
+// doesn't wake up 20×/s.
 const FLUSH_INTERVAL_MS = 50;
 
 const EMPTY_PROGRESS: Progress = {
@@ -64,10 +65,13 @@ export function useFetchRun() {
     if (pendingLogs.current.length) {
       const batch = pendingLogs.current;
       pendingLogs.current = [];
-      setLogs((prev) => {
-        const next = prev.concat(batch);
-        return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
-      });
+      // A transition: new log lines never hold up a click (a tab switch, Cancel).
+      startTransition(() =>
+        setLogs((prev) => {
+          const next = prev.concat(batch);
+          return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next;
+        }),
+      );
     }
     if (pendingProgress.current) {
       setProgress(pendingProgress.current);
@@ -90,8 +94,10 @@ export function useFetchRun() {
     [],
   );
 
+  /** A line from this side (run separators, IPC trouble). Rust's lines arrive formatted. */
   const log = useCallback(
-    (level: LogLevel, parts: LogPart[], at = new Date()) => {
+    (level: LogLevel, parts: LogPart[]) => {
+      const at = new Date();
       pendingLogs.current.push({ id: nextId.current++, time: logTimestamp(at), shortTime: shortTime(at), level, parts });
       schedule();
     },
@@ -101,9 +107,9 @@ export function useFetchRun() {
   const onEvent = useCallback(
     (event: FetchEvent) => {
       switch (event.event) {
-        case 'log':
-          log(event.data.level, event.data.parts, new Date(event.data.time));
-          return;
+        case 'logs':
+          for (const line of event.data) pendingLogs.current.push({ id: nextId.current++, ...line });
+          break;
         case 'progress':
           pendingProgress.current = event.data;
           break;
@@ -113,7 +119,7 @@ export function useFetchRun() {
       }
       schedule();
     },
-    [log, schedule],
+    [schedule],
   );
 
   const start = useCallback(

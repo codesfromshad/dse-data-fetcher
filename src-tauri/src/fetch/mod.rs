@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chrono::{Local, Utc};
+use chrono::Local;
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, State};
 use tokio_util::sync::CancellationToken;
@@ -43,31 +43,102 @@ impl Drop for RunSlot<'_> {
     }
 }
 
-#[derive(Clone, Serialize)]
+/// One activity-log line, stamped and formatted here (mirrors `LogLine` in
+/// src/lib/fetch.ts).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogLine {
+    level: Level,
+    parts: Vec<Part>,
+    /// YYYY-MM-DDTHH:mm:ss.SSS±HH:MM, for copy/export.
+    time: String,
+    /// HH:mm:ss.SSS, shown in the list.
+    short_time: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase", tag = "event", content = "data")]
 pub enum FetchEvent {
-    /// `time` is Unix time in ms.
-    Log { level: Level, parts: Vec<Part>, time: i64 },
+    /// Log lines in order, batched: one IPC message per `LOG_FLUSH_INTERVAL`
+    /// instead of one per line.
+    Logs(Vec<LogLine>),
     Progress { stage: Stage, status: String, counts: Counts },
     /// Network metrics, a few times a second (only with the setting on).
     Metrics(Snapshot),
 }
 
-struct ChannelSink(Channel<FetchEvent>);
+/// How long a log line may wait to be sent with the ones after it. Matches
+/// the UI's render throttle, so batching here adds no visible delay.
+const LOG_FLUSH_INTERVAL: Duration = Duration::from_millis(50);
+/// Send early once this many lines are queued.
+const LOG_BATCH_MAX: usize = 256;
 
-impl ChannelSink {
-    fn metrics(&self, snapshot: Snapshot) {
-        let _ = self.0.send(FetchEvent::Metrics(snapshot));
+/// Where events go: the Tauri channel, or a Vec in tests.
+trait Outbox: Sync {
+    fn send(&self, event: FetchEvent);
+}
+
+impl Outbox for Channel<FetchEvent> {
+    fn send(&self, event: FetchEvent) {
+        let _ = Channel::send(self, event);
     }
 }
 
-impl Sink for ChannelSink {
+#[derive(Default)]
+struct Pending {
+    lines: Vec<LogLine>,
+    /// When the oldest queued line was logged.
+    since: Option<Instant>,
+}
+
+/// Streams a run to the UI. Log lines are queued and sent in batches (when
+/// `LOG_FLUSH_INTERVAL` has passed, `LOG_BATCH_MAX` are waiting, or before
+/// any progress event, so order is kept). A burst of 1000 lines is a handful
+/// of IPC messages, not 1000 JSON parses and callbacks in the window.
+struct ChannelSink<O: Outbox = Channel<FetchEvent>> {
+    out: O,
+    pending: Mutex<Pending>,
+}
+
+impl<O: Outbox> ChannelSink<O> {
+    fn new(out: O) -> Self {
+        Self { out, pending: Mutex::new(Pending::default()) }
+    }
+
+    fn metrics(&self, snapshot: Snapshot) {
+        self.out.send(FetchEvent::Metrics(snapshot));
+    }
+
+    /// Send whatever is queued. Called on a timer during the run and once at the end.
+    fn flush(&self) {
+        let mut pending = self.pending.lock().unwrap();
+        self.send_pending(&mut pending);
+    }
+
+    fn send_pending(&self, pending: &mut Pending) {
+        pending.since = None;
+        if !pending.lines.is_empty() {
+            self.out.send(FetchEvent::Logs(std::mem::take(&mut pending.lines)));
+        }
+    }
+}
+
+impl<O: Outbox> Sink for ChannelSink<O> {
     fn log(&self, level: Level, parts: Vec<Part>) {
-        let _ = self.0.send(FetchEvent::Log { level, parts, time: Utc::now().timestamp_millis() });
+        let (time, short_time) = time::log_stamps(Local::now());
+        // Sent under the lock so lines from concurrent requests stay in order.
+        let mut pending = self.pending.lock().unwrap();
+        pending.lines.push(LogLine { level, parts, time, short_time });
+        let since = *pending.since.get_or_insert_with(Instant::now);
+        if pending.lines.len() >= LOG_BATCH_MAX || since.elapsed() >= LOG_FLUSH_INTERVAL {
+            self.send_pending(&mut pending);
+        }
     }
 
     fn progress(&self, stage: Stage, status: String, counts: Counts) {
-        let _ = self.0.send(FetchEvent::Progress { stage, status, counts });
+        let mut pending = self.pending.lock().unwrap();
+        self.send_pending(&mut pending);
+        self.out.send(FetchEvent::Progress { stage, status, counts });
     }
 }
 
@@ -135,9 +206,9 @@ pub async fn start_fetch(
         token
     };
     let _slot = RunSlot(&fetch.cancel);
-    let sink = ChannelSink(on_event);
+    let sink = ChannelSink::new(on_event);
 
-    match run(&app, &state, &sink, &cancel, open_after).await {
+    let outcome = match run(&app, &state, &sink, &cancel, open_after).await {
         Ok(result) => Ok(result),
         Err(Failure::Cancelled) => {
             sink.log(Level::Warn, parts!["Fetch cancelled."]);
@@ -152,7 +223,10 @@ pub async fn start_fetch(
             sink.log(Level::Error, parts![message.clone()]);
             Err(FetchError::new("failed", message))
         }
-    }
+    };
+    // The last lines go out before the command resolves.
+    sink.flush();
+    outcome
 }
 
 /// Stop the running fetch (no-op when none is running).
@@ -174,7 +248,7 @@ pub async fn check_dse() -> Result<u64, HttpError> {
 async fn run(
     app: &AppHandle,
     state: &AppState,
-    sink: &ChannelSink,
+    sink: &ChannelSink<impl Outbox>,
     cancel: &CancellationToken,
     open_after: bool,
 ) -> Result<FetchResult, Failure> {
@@ -205,6 +279,9 @@ async fn run(
     // Sample the counters on a timer while the fetch runs.
     let mut ticker = tokio::time::interval(SAMPLE_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // ...and send queued log lines that nothing else has pushed out.
+    let mut log_ticker = tokio::time::interval(LOG_FLUSH_INTERVAL);
+    log_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let fetched = loop {
         tokio::select! {
             result = &mut fetch_all => break result,
@@ -214,6 +291,7 @@ async fn run(
                     sink.metrics(snapshot);
                 }
             }
+            _ = log_ticker.tick() => sink.flush(),
         }
     };
     let elapsed = started.elapsed();
@@ -283,4 +361,93 @@ async fn run(
         ),
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Default)]
+    struct VecOutbox(Mutex<Vec<FetchEvent>>);
+
+    impl Outbox for VecOutbox {
+        fn send(&self, event: FetchEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    fn sent(sink: &ChannelSink<VecOutbox>) -> Vec<FetchEvent> {
+        std::mem::take(&mut *sink.out.0.lock().unwrap())
+    }
+
+    fn batch_sizes(events: &[FetchEvent]) -> Vec<usize> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                FetchEvent::Logs(lines) => Some(lines.len()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_burst_of_lines_is_a_few_messages() {
+        let sink = ChannelSink::new(VecOutbox::default());
+        for i in 0..1000 {
+            sink.log(Level::Info, parts![format!("line {i}")]);
+        }
+        sink.flush();
+        let events = sent(&sink);
+        let sizes = batch_sizes(&events);
+        assert_eq!(sizes.iter().sum::<usize>(), 1000);
+        assert!(events.len() <= 1000 / LOG_BATCH_MAX + 1, "{} messages", events.len());
+        // In order.
+        let texts: Vec<String> = events
+            .iter()
+            .flat_map(|e| match e {
+                FetchEvent::Logs(lines) => lines.iter().map(|l| log::plain(&l.parts)).collect::<Vec<_>>(),
+                _ => vec![],
+            })
+            .collect();
+        assert_eq!(texts[0], "line 0");
+        assert_eq!(texts[999], "line 999");
+    }
+
+    #[test]
+    fn progress_sends_queued_lines_first() {
+        let sink = ChannelSink::new(VecOutbox::default());
+        sink.log(Level::Info, parts!["before"]);
+        sink.progress(Stage::Writing, "Writing".into(), Counts::default());
+        sink.log(Level::Info, parts!["after"]);
+        sink.flush();
+        let events = sent(&sink);
+        assert!(matches!(&events[0], FetchEvent::Logs(l) if l.len() == 1));
+        assert!(matches!(&events[1], FetchEvent::Progress { .. }));
+        assert!(matches!(&events[2], FetchEvent::Logs(l) if l.len() == 1));
+        sink.flush();
+        assert!(sent(&sink).is_empty(), "flushing an empty queue sends nothing");
+    }
+
+    #[test]
+    fn old_lines_go_out_without_waiting_for_a_flush() {
+        let sink = ChannelSink::new(VecOutbox::default());
+        sink.log(Level::Info, parts!["first"]);
+        std::thread::sleep(LOG_FLUSH_INTERVAL + Duration::from_millis(5));
+        sink.log(Level::Info, parts!["second"]);
+        assert_eq!(batch_sizes(&sent(&sink)), vec![2]);
+    }
+
+    #[test]
+    fn serializes_for_the_ui() {
+        let sink = ChannelSink::new(VecOutbox::default());
+        sink.log(Level::Warn, parts!["x"]);
+        sink.flush();
+        let json = serde_json::to_value(&sent(&sink)[0]).unwrap();
+        assert_eq!(json["event"], "logs");
+        let line = &json["data"][0];
+        assert_eq!(line["level"], "warn");
+        assert_eq!(line["parts"][0], "x");
+        assert_eq!(line["shortTime"].as_str().unwrap().len(), "00:00:00.000".len());
+        assert!(line["time"].as_str().unwrap().contains('T'));
+    }
 }

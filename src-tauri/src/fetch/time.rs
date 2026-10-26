@@ -134,6 +134,13 @@ pub fn file_timestamp(now: DateTime<Local>) -> String {
     now.format("%Y-%m-%d_%H_%M_%S%.3f_%z").to_string()
 }
 
+/// Log line stamps: the full YYYY-MM-DDTHH:mm:ss.SSS±HH:MM (for copy/export)
+/// and the HH:mm:ss.SSS shown in the activity log. Formatted here so the UI
+/// doesn't build two strings per line on its hot path.
+pub fn log_stamps(at: DateTime<Local>) -> (String, String) {
+    (at.format("%Y-%m-%dT%H:%M:%S%.3f%:z").to_string(), at.format("%H:%M:%S%.3f").to_string())
+}
+
 /// HH:mm:ss.SSS for an elapsed duration.
 pub fn format_duration(elapsed: Duration) -> String {
     let total = elapsed.as_millis();
@@ -182,6 +189,17 @@ mod tests {
     #[test]
     fn durations() {
         assert_eq!(format_duration(Duration::from_millis(3_723_045)), "01:02:03.045");
+    }
+
+    #[test]
+    fn log_stamp_shapes() {
+        let t = Local.with_ymd_and_hms(2026, 10, 25, 9, 5, 7).unwrap() + chrono::Duration::milliseconds(45);
+        let (full, short) = log_stamps(t);
+        assert_eq!(short, "09:05:07.045");
+        assert!(full.starts_with("2026-10-25T09:05:07.045"), "{full}");
+        // ±HH:MM offset, like the TS logTimestamp it replaces.
+        let offset = &full[full.len() - 6..];
+        assert!(offset.starts_with(['+', '-']) && offset.as_bytes()[3] == b':', "{full}");
     }
 
     #[test]

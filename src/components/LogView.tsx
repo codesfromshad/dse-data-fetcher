@@ -1,4 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Button,
   Caption1,
@@ -42,11 +43,19 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
-    padding: `${tokens.spacingVerticalXS} 0`,
+    // Rows are absolutely positioned, so new ones never shift what's on screen.
+    overflowAnchor: 'none',
     fontSize: tokens.fontSizeBase300,
     lineHeight: tokens.lineHeightBase300,
   },
+  // Full height of every row (measured or estimated), so the scrollbar is right.
+  sizer: { position: 'relative', width: '100%' },
   row: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    boxSizing: 'border-box',
     display: 'grid',
     gridTemplateColumns: '92px 76px minmax(0, 1fr)',
     alignItems: 'baseline',
@@ -166,11 +175,31 @@ function renderPart(part: LogPart, i: number, styles: Styles) {
   );
 }
 
-const Row = memo(function Row({ entry }: { entry: LogEntry }) {
-  const styles = useStyles();
+// One line of text plus the row's 3px padding top and bottom. Rows that wrap
+// are measured once they're on screen.
+const ROW_ESTIMATE = 26;
+/** Spacing above the first row and below the last (was the scroller's padding). */
+const LIST_PADDING = 4;
+/** Rows rendered beyond each edge of the viewport, so fast scrolling doesn't flash blank. */
+const OVERSCAN = 12;
+
+interface RowProps {
+  entry: LogEntry;
+  index: number;
+  start: number;
+  styles: Styles;
+  measure: (el: HTMLElement | null) => void;
+}
+
+// Only the rows in view (plus a few) exist, whatever the log's length.
+// `styles` comes from the list: one style lookup per render, not per row.
+const Row = memo(function Row({ entry, index, start, styles, measure }: RowProps) {
   return (
     <div
+      ref={measure}
+      data-index={index}
       className={mergeClasses(styles.row, entry.level === 'warn' && styles.rowWarn, entry.level === 'error' && styles.rowError)}
+      style={{ transform: `translateY(${start}px)` }}
       title={entry.time}
     >
       <span className={styles.time}>{entry.shortTime}</span>
@@ -190,15 +219,36 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
   const [copied, setCopied] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
+  const lastScrollTop = useRef(0);
+
   const issues = useMemo(() => logs.filter((e) => e.level === 'warn' || e.level === 'error'), [logs]);
   const visible = filter === 'all' ? logs : issues;
   const issueCount = issues.length;
 
-  // Stick to the bottom while following.
+  const virtualizer = useVirtualizer({
+    count: visible.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => ROW_ESTIMATE,
+    getItemKey: (index) => visible[index].id,
+    overscan: OVERSCAN,
+    paddingStart: LIST_PADDING,
+    paddingEnd: LIST_PADDING,
+  });
+  const totalSize = virtualizer.getTotalSize();
+
+  // Stick to the bottom while following (also once wrapped rows are measured).
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && follow && atBottom) el.scrollTop = el.scrollHeight;
-  }, [visible, follow, atBottom]);
+  }, [visible.length, totalSize, follow, atBottom]);
+
+  // The Fetch page is hidden (display: none) on other tabs, which resets
+  // scroll positions. Coming back, put the reader where they were.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && !(follow && atBottom)) el.scrollTop = lastScrollTop.current;
+    // Only on show: the effect above handles following.
+  }, []);
 
   useEffect(() => {
     if (!copied) return;
@@ -208,7 +258,8 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
 
   const onScroll = () => {
     const el = scroller.current;
-    if (!el) return;
+    if (!el || !el.clientHeight) return; // hidden
+    lastScrollTop.current = el.scrollTop;
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
   };
 
@@ -252,7 +303,18 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
       <div className={styles.jumpWrap}>
         <div ref={scroller} className={styles.scroller} onScroll={onScroll} data-allow-context-menu>
           {visible.length ? (
-            visible.map((entry) => <Row key={entry.id} entry={entry} />)
+            <div className={styles.sizer} style={{ height: totalSize }}>
+              {virtualizer.getVirtualItems().map((item) => (
+                <Row
+                  key={item.key}
+                  entry={visible[item.index]}
+                  index={item.index}
+                  start={item.start}
+                  styles={styles}
+                  measure={virtualizer.measureElement}
+                />
+              ))}
+            </div>
           ) : (
             <div className={styles.empty}>{filter === 'all' ? 'Nothing logged yet.' : 'No warnings or errors.'}</div>
           )}

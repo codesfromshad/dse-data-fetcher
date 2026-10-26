@@ -45,9 +45,19 @@ export interface FetchResult {
   network: NetworkMetrics;
 }
 
+/** One log line, stamped and formatted in Rust (`LogLine` in fetch/mod.rs). */
+export interface LogLine {
+  level: LogLevel;
+  parts: LogPart[];
+  /** YYYY-MM-DDTHH:mm:ss.SSS±HH:MM */
+  time: string;
+  /** HH:mm:ss.SSS */
+  shortTime: string;
+}
+
 export type FetchEvent =
-  /** `time`: Unix ms, stamped in Rust. */
-  | { event: 'log'; data: { level: LogLevel; parts: LogPart[]; time: number } }
+  /** Lines in order, batched by Rust (about one message per 50 ms). */
+  | { event: 'logs'; data: LogLine[] }
   | { event: 'progress'; data: Progress }
   /** A few times a second, only with "Show network metrics" on. */
   | { event: 'metrics'; data: NetworkMetrics };

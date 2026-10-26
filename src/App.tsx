@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Activity, lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -102,6 +102,10 @@ export default function App() {
   const [page, setPage] = useState<Page>('fetch');
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [notice, setNotice] = useState<string | null>(null);
+  // Pages stay mounted once opened and are hidden instead (see <Activity>
+  // below), so coming back to one doesn't rebuild it.
+  const [opened, setOpened] = useState<ReadonlySet<Page>>(() => new Set(['fetch']));
+  if (!opened.has(page)) setOpened(new Set([...opened, page]));
 
   const hasApp = effectiveApp(system.spreadsheet) !== null;
   const ready = system.checks.filter((c) => c.id !== 'spreadsheet').every((c) => c.state === 'ok');
@@ -197,8 +201,14 @@ export default function App() {
       <main className={styles.content}>
         {/* About and Settings → Updates show the full update panel instead. */}
         {page !== 'about' && !(page === 'settings' && settingsSection === 'updates') && <UpdateBanner />}
-        {page === 'fetch' && (
-          <>
+        {/*
+          Fetch is hidden, not unmounted, on other tabs: remounting it meant
+          rebuilding the activity log, which is what made switching back slow
+          with 1000+ lines. While hidden, its effects (the elapsed clock's
+          animation frame, log auto-scroll) are paused and its updates render
+          at idle priority.
+        */}
+        <Activity mode={page === 'fetch' ? 'visible' : 'hidden'} name="Fetch">
             {notice && (
               <MessageBar intent="error">
                 <MessageBarBody>{notice}</MessageBarBody>
@@ -243,13 +253,18 @@ export default function App() {
             )}
 
             <LogView logs={run.logs} onClear={run.clearLogs} />
-          </>
-        )}
+        </Activity>
         <Suspense fallback={null}>
-          {page === 'settings' && (
-            <SettingsView system={system} section={settingsSection} onSectionChange={setSettingsSection} />
+          {opened.has('settings') && (
+            <Activity mode={page === 'settings' ? 'visible' : 'hidden'} name="Settings">
+              <SettingsView system={system} section={settingsSection} onSectionChange={setSettingsSection} />
+            </Activity>
           )}
-          {page === 'about' && <AboutView />}
+          {opened.has('about') && (
+            <Activity mode={page === 'about' ? 'visible' : 'hidden'} name="About">
+              <AboutView />
+            </Activity>
+          )}
         </Suspense>
       </main>
 

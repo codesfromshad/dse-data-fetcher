@@ -87,10 +87,11 @@ const TITLES: Record<Phase, string> = {
 };
 
 /**
- * Stopwatch text. While running it repaints every frame (hundredths) by
- * writing its own text node, so the rest of the card doesn't re-render 60×/s.
- * React never renders children here, so the two never fight over the DOM.
- * Once finished it shows the exact time to the millisecond.
+ * Stopwatch text, to the millisecond. While running it repaints every frame
+ * by writing its own text node, so the rest of the card doesn't re-render
+ * 60×/s. React never renders children here, so the two never fight over the
+ * DOM. While the Fetch page is hidden the effect is torn down (see App's
+ * <Activity>), so the clock costs nothing on other pages.
  */
 function ElapsedClock({ startedAt, finishedAt, className }: { startedAt: number | null; finishedAt: number | null; className: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -102,12 +103,12 @@ function ElapsedClock({ startedAt, finishedAt, className }: { startedAt: number 
       return;
     }
     if (finishedAt !== null) {
-      el.textContent = formatElapsed(finishedAt - startedAt, 3);
+      el.textContent = formatElapsed(finishedAt - startedAt);
       return;
     }
     let frame = 0;
     const tick = () => {
-      const text = formatElapsed(performance.now() - startedAt, 2);
+      const text = formatElapsed(performance.now() - startedAt);
       if (el.textContent !== text) el.textContent = text;
       frame = requestAnimationFrame(tick);
     };
