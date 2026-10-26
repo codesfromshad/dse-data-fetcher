@@ -905,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "dse-data-fetcher"
-version = "2.1.4"
+version = "2.1.5"
 dependencies = [
  "brotli-decompressor",
  "chrono",

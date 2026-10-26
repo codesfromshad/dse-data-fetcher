@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-10-27
+
 ### Added
 
 - **Pause fetching.** Pause a running fetch and resume it later. Pages already downloading finish; no new ones start until you press **Resume fetching**. You can still stop the fetch while it's paused. Time spent paused doesn't count towards the elapsed time or the average speed.
