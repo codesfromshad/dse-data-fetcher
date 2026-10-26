@@ -56,6 +56,7 @@ import {
   type UpdateChannel,
 } from '../lib/settings';
 import { ChangelogDialog } from './ReleaseNotes';
+import { ScrollArea } from './ScrollArea';
 import { SettingCard, SettingRow, SettingsGroup } from './SettingRow';
 import { CheckList } from './SystemCheck';
 import { UpdatePanel } from './UpdateControls';
@@ -77,7 +78,21 @@ const useStyles = makeStyles({
   page: { flex: 1, minHeight: 0, display: 'flex', gap: tokens.spacingHorizontalXXL },
   nav: { width: '200px', flexShrink: 0, paddingTop: tokens.spacingVerticalXS },
   navList: { width: '100%' },
-  content: { flex: 1, minWidth: 0, overflowY: 'auto', display: 'flex', justifyContent: 'center' },
+  // Runs to the window's right and bottom edges, like Windows Settings: the
+  // scrollbar sits at the edge and the shell's gutter moves inside as padding.
+  scrollArea: {
+    flex: 1,
+    marginRight: `calc(-1 * ${tokens.spacingHorizontalXL})`,
+    marginBottom: `calc(-1 * ${tokens.spacingVerticalXL})`,
+  },
+  content: {
+    display: 'flex',
+    justifyContent: 'center',
+    // The column sizes to its content, so the scrollbar sees it grow.
+    alignItems: 'flex-start',
+    paddingRight: tokens.spacingHorizontalXL,
+    paddingBottom: tokens.spacingVerticalXL,
+  },
   column: {
     width: '100%',
     maxWidth: '860px',
@@ -85,7 +100,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
     paddingBottom: tokens.spacingVerticalXXL,
-    paddingRight: tokens.spacingHorizontalS,
   },
   title: { marginBottom: tokens.spacingVerticalS },
   dropdown: { minWidth: '210px' },
@@ -145,7 +159,7 @@ export function SettingsView({ system, section, onSectionChange }: Props) {
         </TabList>
       </nav>
 
-      <div className={styles.content}>
+      <ScrollArea className={styles.scrollArea} viewportClassName={styles.content}>
         <div className={styles.column}>
           <Title3 className={styles.title}>{current.label}</Title3>
           {error && (
@@ -159,7 +173,7 @@ export function SettingsView({ system, section, onSectionChange }: Props) {
           {section === 'system' && <SystemSection system={system} act={act} />}
           {section === 'advanced' && <AdvancedSection act={act} />}
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }

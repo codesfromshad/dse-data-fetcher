@@ -14,6 +14,7 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { ArrowDownRegular, CopyRegular, DeleteRegular, TextBulletListLtrRegular } from '@fluentui/react-icons';
+import { ScrollArea } from './ScrollArea';
 import { entryToText, levelLabel, type LogEntry, type LogLevel, type LogPart, type Tone } from '../lib/log';
 
 const useStyles = makeStyles({
@@ -38,11 +39,9 @@ const useStyles = makeStyles({
   },
   title: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS },
   spacer: { flex: 1 },
+  scrollArea: { flex: 1 },
   scroller: {
     position: 'relative',
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto',
     // The virtualizer corrects the scroll position itself when rows above the
     // viewport are measured; the browser's own anchoring would correct twice.
     overflowAnchor: 'none',
@@ -294,7 +293,13 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
       </div>
 
       <div className={styles.jumpWrap}>
-        <div ref={scroller} className={styles.scroller} onScroll={onScroll} data-allow-context-menu>
+        <ScrollArea
+          className={styles.scrollArea}
+          viewportClassName={styles.scroller}
+          viewportRef={scroller}
+          onScroll={onScroll}
+          data-allow-context-menu
+        >
           {visible.length ? (
             // The rendered rows sit in normal flow between two spacers that
             // stand in for the rows above and below. Rows are never placed at
@@ -315,7 +320,7 @@ export function LogView({ logs, onClear }: { logs: LogEntry[]; onClear: () => vo
           ) : (
             <div className={styles.empty}>{filter === 'all' ? 'Nothing logged yet.' : 'No warnings or errors.'}</div>
           )}
-        </div>
+        </ScrollArea>
         {!atBottom && visible.length > 0 && (
           <Button className={styles.jump} appearance="primary" shape="circular" size="small" icon={<ArrowDownRegular />} onClick={jumpToEnd}>
             Latest

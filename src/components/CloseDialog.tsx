@@ -12,6 +12,7 @@ import {
 } from '@fluentui/react-components';
 import { DocumentTableRegular, LockClosedRegular } from '@fluentui/react-icons';
 import type { LockedFile } from '../lib/native';
+import { ScrollArea } from './ScrollArea';
 
 // Laid out like a Windows 11 content dialog: title and text on the surface,
 // equal-width buttons on a darker footer band.
@@ -52,9 +53,9 @@ const useStyles = makeStyles({
     margin: 0,
     padding: 0,
     listStyle: 'none',
-    maxHeight: '160px',
-    overflowY: 'auto',
+    paddingRight: tokens.spacingHorizontalL,
   },
+  filesArea: { maxHeight: '160px' },
   file: {
     display: 'flex',
     alignItems: 'center',
@@ -109,14 +110,16 @@ export function CloseDialog({ locked, onRetry, onCloseAnyway, onStay }: Props) {
                 {one ? 'This temporary file is' : 'These temporary files are'} open in your spreadsheet application, so{' '}
                 {one ? 'it' : 'they'} can’t be deleted yet.
               </Body1>
-              <ul className={styles.files}>
-                {locked.map((f) => (
-                  <li key={f.path} className={styles.file} title={f.path}>
-                    <DocumentTableRegular className={styles.fileIcon} />
-                    <Caption1 className={styles.fileName}>{f.fileName}</Caption1>
-                  </li>
-                ))}
-              </ul>
+              <ScrollArea className={styles.filesArea}>
+                <ul className={styles.files}>
+                  {locked.map((f) => (
+                    <li key={f.path} className={styles.file} title={f.path}>
+                      <DocumentTableRegular className={styles.fileIcon} />
+                      <Caption1 className={styles.fileName}>{f.fileName}</Caption1>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
               <Body1>
                 Close {one ? 'it' : 'them'} there, then choose <strong>Try again</strong>. Or close anyway and{' '}
                 {one ? 'it stays' : 'they stay'} in your temp folder.

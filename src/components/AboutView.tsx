@@ -48,11 +48,26 @@ import {
 import { DSE_URL } from '../lib/fetch';
 import { getBuildInfo, type BuildInfo } from '../lib/settings';
 import { LegalDialog } from './LegalDialog';
+import { ScrollArea } from './ScrollArea';
 import { ChangelogDialog, formatDate, ReleaseBlock } from './ReleaseNotes';
 import { UpdatePanel } from './UpdateControls';
 
 const useStyles = makeStyles({
-  page: { flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', justifyContent: 'center' },
+  // Runs to the window's right and bottom edges, like Windows Settings: the
+  // scrollbar sits at the edge and the shell's gutter moves inside as padding.
+  scrollArea: {
+    flex: 1,
+    marginRight: `calc(-1 * ${tokens.spacingHorizontalXL})`,
+    marginBottom: `calc(-1 * ${tokens.spacingVerticalXL})`,
+  },
+  page: {
+    display: 'flex',
+    justifyContent: 'center',
+    // The column sizes to its content, so the scrollbar sees it grow.
+    alignItems: 'flex-start',
+    paddingRight: tokens.spacingHorizontalXL,
+    paddingBottom: tokens.spacingVerticalXL,
+  },
   column: {
     width: '100%',
     maxWidth: '960px',
@@ -181,7 +196,7 @@ export function AboutView() {
   ];
 
   return (
-    <div className={styles.page}>
+    <ScrollArea className={styles.scrollArea} viewportClassName={styles.page}>
       <div className={styles.column}>
         {/* Identity + update status, like the About page of a browser. */}
         <section className={mergeClasses(styles.card, styles.hero)} aria-label="About">
@@ -302,6 +317,6 @@ export function AboutView() {
       </div>
 
       <LegalDialog doc={legal} onClose={() => setLegal(null)} />
-    </div>
+    </ScrollArea>
   );
 }

@@ -19,6 +19,7 @@ import {
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { hasContent, isUnreleased, parseChangelog, type Release } from '../lib/changelog';
 import { RELEASES } from '../lib/content';
+import { ScrollArea } from './ScrollArea';
 import { APP_VERSION, displayVersion, LINKS } from '../lib/description';
 
 const useStyles = makeStyles({
@@ -43,7 +44,10 @@ const useStyles = makeStyles({
   },
   all: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalXXL },
   surface: { maxWidth: '760px', width: 'calc(100vw - 48px)' },
-  scroll: { maxHeight: '60vh', overflowY: 'auto', paddingRight: tokens.spacingHorizontalS },
+  // DialogContent no longer scrolls itself; the ScrollArea inside it does.
+  content: { overflow: 'visible', display: 'flex', flexDirection: 'column', minHeight: 0 },
+  scrollArea: { maxHeight: '60vh' },
+  scroll: { paddingRight: tokens.spacingHorizontalXL },
 });
 
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g;
@@ -150,12 +154,14 @@ export function ChangelogDialog({ trigger }: { trigger: ReactElement }) {
       <DialogSurface className={styles.surface}>
         <DialogBody>
           <DialogTitle>Release notes</DialogTitle>
-          <DialogContent className={styles.scroll}>
-            <div className={styles.all}>
-              {releases.map((release) => (
-                <ReleaseBlock key={release.version} release={release} />
-              ))}
-            </div>
+          <DialogContent className={styles.content}>
+            <ScrollArea className={styles.scrollArea} viewportClassName={styles.scroll}>
+              <div className={styles.all}>
+                {releases.map((release) => (
+                  <ReleaseBlock key={release.version} release={release} />
+                ))}
+              </div>
+            </ScrollArea>
           </DialogContent>
           <DialogActions>
             <Button appearance="subtle" onClick={() => void openUrl(LINKS.releases).catch(() => {})}>

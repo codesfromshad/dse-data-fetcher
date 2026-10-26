@@ -14,13 +14,15 @@ import {
 } from '@fluentui/react-components';
 import { CopyRegular } from '@fluentui/react-icons';
 import type { LegalDoc } from '../lib/legal';
+import { ScrollArea } from './ScrollArea';
 
 const useStyles = makeStyles({
   surface: { maxWidth: '760px', width: 'calc(100vw - 48px)' },
+  // DialogContent no longer scrolls itself; the ScrollArea inside it does.
+  content: { overflow: 'visible', display: 'flex', flexDirection: 'column', minHeight: 0 },
+  scrollArea: { maxHeight: '62vh' },
   scroll: {
-    maxHeight: '62vh',
-    overflowY: 'auto',
-    paddingRight: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalXL,
     display: 'flex',
     flexDirection: 'column',
     gap: tokens.spacingVerticalS,
@@ -86,8 +88,10 @@ export function LegalDialog({ doc, onClose }: Props) {
         {doc && (
           <DialogBody>
             <DialogTitle>{doc.title}</DialogTitle>
-            <DialogContent className={styles.scroll} data-allow-context-menu>
-              <LegalText text={doc.text} />
+            <DialogContent className={styles.content}>
+              <ScrollArea className={styles.scrollArea} viewportClassName={styles.scroll} data-allow-context-menu>
+                <LegalText text={doc.text} />
+              </ScrollArea>
             </DialogContent>
             <DialogActions>
               <Button
