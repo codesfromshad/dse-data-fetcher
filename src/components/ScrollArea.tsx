@@ -23,6 +23,10 @@ import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
  * bar grows or shrinks.
  */
 const ARROW = 12;
+/** Gap between each arrow and the furthest the thumb goes. */
+const ARROW_GAP = 2;
+/** Track kept clear at each end: an arrow and its gap. */
+const END = ARROW + ARROW_GAP;
 /** Shortest the thumb gets on very long content. */
 const MIN_THUMB = 24;
 /** One arrow click, about three lines. */
@@ -113,13 +117,23 @@ const useStyles = makeStyles({
     height: `${ARROW}px`,
     display: 'grid',
     placeItems: 'center',
-    color: tokens.colorNeutralForeground3,
+    // Like Windows: grey at rest, brighter under the pointer, and while
+    // pressed it stays bright and the glyph shrinks a little.
+    color: tokens.colorNeutralForeground4,
     opacity: 0,
-    transitionProperty: 'opacity',
-    transitionDuration: tokens.durationFast,
+    transitionProperty: 'opacity, color',
+    transitionDuration: `${tokens.durationFast}, ${tokens.durationFaster}`,
+    transitionTimingFunction: tokens.curveEasyEase,
     '@media (prefers-reduced-motion: reduce)': { transitionDuration: '0.01ms' },
-    ':hover': { color: tokens.colorNeutralForeground1 },
+    '& svg': {
+      transitionProperty: 'transform',
+      transitionDuration: tokens.durationFaster,
+      transitionTimingFunction: tokens.curveEasyEase,
+      '@media (prefers-reduced-motion: reduce)': { transitionDuration: '0.01ms' },
+    },
+    ':hover': { color: tokens.colorNeutralForeground2 },
     ':active': { color: tokens.colorNeutralForeground2 },
+    ':active svg': { transform: 'scale(0.85)' },
   },
   arrowOn: { opacity: 1 },
   up: { top: 0 },
@@ -183,12 +197,12 @@ export function ScrollArea({
     const { scrollHeight, clientHeight, scrollTop } = el;
     // From the viewport, not the rail: the rail is display: none (0px) until
     // there's something to scroll. A floating rail is inset 1px at the bottom.
-    const track = clientHeight - (flush ? 0 : 1) - ARROW * 2;
+    const track = clientHeight - (flush ? 0 : 1) - END * 2;
     const range = scrollHeight - clientHeight;
     if (range <= 1 || track <= 0 || clientHeight === 0) return null;
     const length = Math.max(MIN_THUMB, Math.min(track, (clientHeight / scrollHeight) * track));
     const travel = track - length;
-    return { length, travel, range, offset: ARROW + (travel * scrollTop) / range };
+    return { length, travel, range, offset: END + (travel * scrollTop) / range };
   }, [flush]);
 
   // Written straight to the DOM on every scroll: no React render per frame.
@@ -372,8 +386,10 @@ export function ScrollArea({
 /** The small filled triangle Windows draws on scrollbar buttons. */
 function Chevron({ up = false }: { up?: boolean }) {
   return (
-    <svg width="8" height="8" viewBox="0 0 8 8" style={{ transform: up ? undefined : 'rotate(180deg)', pointerEvents: 'none' }}>
-      <path d="M4 1.6 7.2 6.2H0.8Z" fill="currentColor" strokeLinejoin="round" stroke="currentColor" strokeWidth="0.8" />
+    // About 9px wide, a little wider than the 6px thumb (as in Windows).
+    <svg width="10" height="10" viewBox="0 0 10 10" style={{ pointerEvents: 'none' }}>
+      {/* Drawn pointing each way (not rotated), so the press can scale it. */}
+      <path d={up ? 'M5 2.2 9.2 8H0.8Z' : 'M5 7.8 9.2 2H0.8Z'} fill="currentColor" strokeLinejoin="round" stroke="currentColor" strokeWidth="0.8" />
     </svg>
   );
 }

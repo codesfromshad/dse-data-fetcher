@@ -10,6 +10,11 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Changed
+
+- The scrollbar arrows now respond like Windows: they brighten when you point at them and shrink slightly while pressed.
+- The arrows are a little bigger, slightly wider than the scrollbar, with a small gap between them and the scrollbar.
+
 ## [2.1.3] - 2026-10-26
 
 ### Fixed
