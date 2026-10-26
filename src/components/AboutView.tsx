@@ -339,7 +339,7 @@ export function AboutView() {
           </Caption1>
           <Caption1 block>
             Made with <HeartFilled className={styles.heart} aria-label="love" /> in Dhaka, Bangladesh for EDGE Asset
-            Management by {AUTHOR.name}
+            Management by {AUTHOR.name}.
           </Caption1>
           <Caption1 block>
             {FOOTER_LINKS.map(({ id, label }, i) => {
