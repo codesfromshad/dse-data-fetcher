@@ -51,6 +51,7 @@ import {
 import { DSE_URL } from '../lib/fetch';
 import { getBuildInfo, type BuildInfo } from '../lib/settings';
 import { LegalDialog } from './LegalDialog';
+import { OpensInBrowser } from './OpensInBrowser';
 import { ScrollArea } from './ScrollArea';
 import { ChangelogDialog, formatDate, ReleaseBlock } from './ReleaseNotes';
 import { UpdatePanel } from './UpdateControls';
@@ -137,8 +138,6 @@ const useStyles = makeStyles({
   footerLink: { fontSize: 'inherit', lineHeight: 'inherit' },
   // A gap rather than a space, so the underline starts at the handle.
   footerIcon: { verticalAlign: 'middle', marginRight: '3px' },
-  // "Opens in the browser", after the GitHub handle (as on log symbols).
-  footerOpen: { verticalAlign: '-1px', marginLeft: '2px', fontSize: '11px' },
   // The footer's own text colour.
   heart: { verticalAlign: 'middle' },
   footer: { textAlign: 'center', color: tokens.colorNeutralForeground3, padding: `${tokens.spacingVerticalS} 0` },
@@ -170,8 +169,18 @@ const FOOTER_LINKS: { id: LegalDocId; label: string }[] = [
   { id: 'third-party', label: 'Open-source' },
 ];
 
-function LinkRow({ icon: Icon, title, description, onClick }: { icon: FluentIcon; title: string; description?: string; onClick: () => void }) {
+interface LinkRowProps {
+  icon: FluentIcon;
+  title: string;
+  description?: string;
+  onClick: () => void;
+  /** Opens in the browser: the "open" icon instead of the chevron, like Windows Settings. */
+  external?: boolean;
+}
+
+function LinkRow({ icon: Icon, title, description, onClick, external }: LinkRowProps) {
   const styles = useStyles();
+  const End = external ? OpenRegular : ChevronRightRegular;
   return (
     <button type="button" className={styles.linkRow} onClick={onClick}>
       <Icon className={styles.linkIcon} />
@@ -179,7 +188,7 @@ function LinkRow({ icon: Icon, title, description, onClick }: { icon: FluentIcon
         <Body1>{title}</Body1>
         {description && <Caption1 className={styles.muted}>{description}</Caption1>}
       </span>
-      <ChevronRightRegular className={styles.chevron} />
+      <End className={styles.chevron} aria-label={external ? 'Opens in your browser' : undefined} />
     </button>
   );
 }
@@ -298,8 +307,9 @@ export function AboutView() {
             </dl>
             <Caption1 className={styles.muted}>
               Data source:{' '}
-              <Link inline onClick={open(DSE_URL)}>
+              <Link inline title={DSE_URL} onClick={open(DSE_URL)}>
                 {DSE_URL.replace(/^https:\/\/|\/$/g, '')}
+                <OpensInBrowser />
               </Link>
             </Caption1>
             <div className={styles.chips}>
@@ -316,10 +326,10 @@ export function AboutView() {
           <section className={styles.card} aria-label="Help and feedback">
             <Subtitle2>Help & feedback</Subtitle2>
             <div className={styles.links}>
-              <LinkRow icon={BugRegular} title="Report a problem" description="Open an issue on GitHub" onClick={open(LINKS.issues)} />
-              <LinkRow icon={CodeRegular} title="Releases & source" description="Download installers and past versions" onClick={open(LINKS.releases)} />
+              <LinkRow icon={BugRegular} title="Report a problem" description="Open an issue on GitHub" onClick={open(LINKS.issues)} external />
+              <LinkRow icon={CodeRegular} title="Releases & source" description="Download installers and past versions" onClick={open(LINKS.releases)} external />
               <LinkRow icon={MailRegular} title="Contact the developer" description={AUTHOR.email} onClick={open(LINKS.email)} />
-              <LinkRow icon={GlobeRegular} title="Website" description={LINKS.website.replace('https://', '')} onClick={open(LINKS.website)} />
+              <LinkRow icon={GlobeRegular} title="Website" description={LINKS.website.replace('https://', '')} onClick={open(LINKS.website)} external />
             </div>
           </section>
 
@@ -342,7 +352,7 @@ export function AboutView() {
             <Link inline className={styles.footerLink} title={LINKS.github} onClick={open(LINKS.github)}>
               <GitHubIcon className={styles.footerIcon} />
               {AUTHOR.handle}
-              <OpenRegular className={styles.footerOpen} aria-hidden />
+              <OpensInBrowser />
             </Link>
             ). All rights reserved.
           </Caption1>
@@ -355,7 +365,7 @@ export function AboutView() {
             {commitUrl ? (
               <Link inline className={styles.footerLink} title={commitUrl} onClick={open(commitUrl)}>
                 {BUILD_COMMIT}
-                <OpenRegular className={styles.footerOpen} aria-hidden />
+                <OpensInBrowser />
               </Link>
             ) : (
               BUILD_COMMIT

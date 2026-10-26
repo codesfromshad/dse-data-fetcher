@@ -25,6 +25,7 @@ it as the GitHub release notes and the in-app "What's new".
 - The About page footer now links to all the legal documents on a line of their own: **License**, **Disclaimer**, **Privacy** and **Open-source**.
 - The author's name in the About page footer now links to their GitHub profile.
 - **About → System information** and the footer now show the build: the commit it was built from (linked on GitHub), whether it's a release or debug build, and when it was built. **Copy** includes them too.
+- Links and buttons that open in your browser now show an "open" icon, so you can tell them apart from ones that stay in the app.
 
 ### Fixed
 

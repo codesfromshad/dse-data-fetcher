@@ -17,6 +17,8 @@ import {
   tokens,
 } from '@fluentui/react-components';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { OpenRegular } from '@fluentui/react-icons';
+import { OpensInBrowser } from './OpensInBrowser';
 import { hasContent, isUnreleased, parseChangelog, type Release } from '../lib/changelog';
 import { RELEASES } from '../lib/content';
 import { ScrollArea } from './ScrollArea';
@@ -61,8 +63,9 @@ export function InlineMarkdown({ text }: { text: string }) {
     const link = part.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
     if (link) {
       return (
-        <Link key={i} inline onClick={() => void openUrl(link[2]).catch(() => {})}>
+        <Link key={i} inline title={link[2]} onClick={() => void openUrl(link[2]).catch(() => {})}>
           {link[1]}
+          <OpensInBrowser />
         </Link>
       );
     }
@@ -164,7 +167,12 @@ export function ChangelogDialog({ trigger }: { trigger: ReactElement }) {
             </ScrollArea>
           </DialogContent>
           <DialogActions>
-            <Button appearance="subtle" onClick={() => void openUrl(LINKS.releases).catch(() => {})}>
+            <Button
+              appearance="subtle"
+              icon={<OpenRegular />}
+              iconPosition="after"
+              onClick={() => void openUrl(LINKS.releases).catch(() => {})}
+            >
               View on GitHub
             </Button>
             <DialogTrigger disableButtonEnhancement>

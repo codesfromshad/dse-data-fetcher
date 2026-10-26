@@ -13,7 +13,8 @@ import {
   shorthands,
   tokens,
 } from '@fluentui/react-components';
-import { ArrowDownRegular, CopyRegular, DeleteRegular, OpenRegular, TextBulletListLtrRegular } from '@fluentui/react-icons';
+import { ArrowDownRegular, CopyRegular, DeleteRegular, TextBulletListLtrRegular } from '@fluentui/react-icons';
+import { OpensInBrowser } from './OpensInBrowser';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { ScrollArea } from './ScrollArea';
 import { entryToText, levelLabel, type LogEntry, type LogLevel, type LogPart, type Tone } from '../lib/log';
@@ -75,13 +76,6 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     ':hover': { textDecorationLine: 'underline' },
     ':focus-visible': { textDecorationLine: 'underline', outline: `2px solid ${tokens.colorStrokeFocus2}`, borderRadius: tokens.borderRadiusSmall },
-  },
-  // "Opens in the browser", after the symbol. Not underlined with it.
-  linkIcon: {
-    display: 'inline-block',
-    marginLeft: '2px',
-    fontSize: '12px',
-    verticalAlign: '-1px',
   },
 
   // Pills are plain spans styled like Fluent's Badge: hundreds of rows of
@@ -190,7 +184,7 @@ function renderPart(part: LogPart, i: number, styles: Styles) {
         }}
       >
         {part.text}
-        <OpenRegular className={styles.linkIcon} aria-hidden />
+        <OpensInBrowser />
       </a>
     );
   }
