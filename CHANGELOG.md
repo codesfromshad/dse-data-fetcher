@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-10-26
+
 ### Fixed
 
 - Scrolling the mouse wheel with the pointer on a scrollbar now scrolls exactly like scrolling over the page. Before, it barely moved the activity log.

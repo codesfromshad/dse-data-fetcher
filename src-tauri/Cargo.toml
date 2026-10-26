@@ -1,6 +1,6 @@
 [package]
 name = "dse-data-fetcher"
-version = "2.1.2"
+version = "2.1.3"
 description = "DSE Data Fetcher"
 authors = ["Shadman Rafid Chowdhury (codesfromshad)"]
 edition = "2021"
