@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.0.0-beta.7] - 2026-10-26
+
 ### Fixed
 
 - Switching tabs is instant, with no more blank (black) moment the first time you open **Settings** or **About**. Both pages are now built quietly in the background shortly after the app starts, so a tab click only has to show them.
