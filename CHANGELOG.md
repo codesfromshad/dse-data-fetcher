@@ -10,6 +10,8 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+## [2.1.7] - 2026-10-29
+
 ### Changed
 
 - The scrollbar arrows are larger and rounder, closer to the ones in Windows 11, and sit a little closer to the thumb.
