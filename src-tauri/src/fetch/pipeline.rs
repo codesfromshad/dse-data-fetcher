@@ -258,7 +258,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                     s.counts.fetched += 1;
                     drop(s);
                     let after = if attempt > 1 { format!(" (after {attempt} attempts)") } else { String::new() };
-                    sink.log(Level::Success, parts!["Fetched stock data for ", symbol_link(&symbol), after]);
+                    sink.log(Level::Success, parts!["Fetched stock data for ", symbol_link(&symbol), after, "."]);
                     break;
                 }
 
@@ -277,7 +277,7 @@ pub async fn fetch_all(options: Options<'_>) -> Result<Fetched, RunError> {
                         "Incomplete data for ",
                         symbol_link(&symbol),
                         " ",
-                        hl_as(format!("(NaN/missing: {missing_text})"), Tone::Subtle),
+                        hl_as(format!("(missing values: {missing_text})"), Tone::Subtle),
                         format!(". Fetching again ({retry_label})..."),
                     ],
                 );
@@ -317,6 +317,7 @@ pub fn log_complete(sink: &dyn Sink, fetched: &Fetched, elapsed: Duration, netwo
             failed_part,
             "). Elapsed time: ",
             pill(format_duration(elapsed), Tone::Subtle),
+            ".",
         ],
     );
     if let Some(n) = network {
@@ -343,7 +344,7 @@ pub fn log_complete(sink: &dyn Sink, fetched: &Fetched, elapsed: Duration, netwo
         sink.log(Level::Warn, line);
     }
     if !incomplete.is_empty() {
-        let mut line = parts!["Symbols with blank (NaN/missing) values: "];
+        let mut line = parts!["Symbols with missing values: "];
         line.extend(symbol_list(incomplete));
         sink.log(Level::Warn, line);
     }
@@ -521,8 +522,8 @@ mod tests {
         let has = |level: Level, needle: &str| logs.iter().any(|(l, t)| *l == level && t.contains(needle));
         assert!(has(Level::Info, "Skipping treasury bond TB10Y0131"));
         assert!(has(Level::Info, "Skipping debenture DEBT"));
-        assert!(has(Level::Success, "Fetched stock data for FLAKY (after 2 attempts)"));
-        assert!(has(Level::Warn, "Incomplete data for BLANKY (NaN/missing: Yesterday's Closing Price). Fetching again (retry 1/2)"));
+        assert!(has(Level::Success, "Fetched stock data for FLAKY (after 2 attempts)."));
+        assert!(has(Level::Warn, "Incomplete data for BLANKY (missing values: Yesterday's Closing Price). Fetching again (retry 1/2)"));
         assert!(has(Level::Warn, "Kept incomplete data for BLANKY after 3 attempts"));
         assert!(has(Level::Error, "Failed to fetch stock data for BROKEN after 3 attempts: company name not found on page"));
 
@@ -532,14 +533,14 @@ mod tests {
         let lines = std::mem::take(complete.0.get_mut().unwrap());
         assert_eq!(
             lines[0].1,
-            "Fetching COMPLETE for all 6 symbols (3 fetched, 2 skipped, 1 failed). Elapsed time: 00:00:01.500"
+            "Fetching COMPLETE for all 6 symbols (3 fetched, 2 skipped, 1 failed). Elapsed time: 00:00:01.500."
         );
         assert_eq!(
             lines[1].1,
             "Network: 2.00 KB transferred, 8.00 KB processed in 9 requests. Average 1.00 KB/s, peak 4.00 KB/s."
         );
         assert_eq!(lines[2].1, "Failed symbols: BROKEN");
-        assert_eq!(lines[3].1, "Symbols with blank (NaN/missing) values: BLANKY");
+        assert_eq!(lines[3].1, "Symbols with missing values: BLANKY");
     }
 
     #[tokio::test(flavor = "multi_thread")]

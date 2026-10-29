@@ -24,7 +24,7 @@ import { makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
  */
 const ARROW = 12;
 /** Gap between each arrow and the furthest the thumb goes. */
-const ARROW_GAP = 2;
+const ARROW_GAP = 1.5;
 /** Track kept clear at each end: an arrow and its gap. */
 const END = ARROW + ARROW_GAP;
 /** Shortest the thumb gets on very long content. */
@@ -386,10 +386,18 @@ export function ScrollArea({
 /** The small filled triangle Windows draws on scrollbar buttons. */
 function Chevron({ up = false }: { up?: boolean }) {
   return (
-    // About 9px wide, a little wider than the 6px thumb (as in Windows).
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ pointerEvents: 'none' }}>
-      {/* Drawn pointing each way (not rotated), so the press can scale it. */}
-      <path d={up ? 'M5 2.2 9.2 8H0.8Z' : 'M5 7.8 9.2 2H0.8Z'} fill="currentColor" strokeLinejoin="round" stroke="currentColor" strokeWidth="0.8" />
+    // About 10px wide, clearly wider than the 6px thumb (as in Windows).
+    <svg width="12" height="12" viewBox="0 0 12 12" style={{ pointerEvents: 'none' }}>
+      {/* Drawn pointing each way (not rotated), so the press can scale it.
+          Corners are curved like the Windows 11 glyph, not just softened. */}
+      <path
+        d={
+          up
+            ? 'M4.34 4.75Q6 2.25 7.66 4.75L9.34 7.25Q11 9.75 8 9.75H4Q1 9.75 2.66 7.25Z'
+            : 'M4.34 7.25Q6 9.75 7.66 7.25L9.34 4.75Q11 2.25 8 2.25H4Q1 2.25 2.66 4.75Z'
+        }
+        fill="currentColor"
+      />
     </svg>
   );
 }

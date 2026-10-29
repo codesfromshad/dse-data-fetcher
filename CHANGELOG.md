@@ -10,6 +10,11 @@ it as the GitHub release notes and the in-app "What's new".
 
 ## [Unreleased]
 
+### Changed
+
+- The scrollbar arrows are larger and rounder, closer to the ones in Windows 11, and sit a little closer to the thumb.
+- The activity log now says "missing values" instead of "NaN/missing", and the "Fetched stock data" and "Fetching complete" lines end with a full stop.
+
 ## [2.1.6] - 2026-10-27
 
 ### Added
